@@ -8,7 +8,8 @@ import { CATEGORIES } from '@/lib/types'
 import { computeWarrantyEndDate, computeWarrantyStatus, computeResaleEstimate } from '@/lib/utils'
 import { ArrowLeft, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 
-const ANON_KEY = process.env.NEXT_PUBLIC_ANTHROPIC_KEY || ''
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 interface ExtractedData {
   product_name: string
@@ -29,58 +30,21 @@ interface ExtractedData {
 }
 
 async function extractFromFile(base64: string, mimeType: string): Promise<ExtractedData> {
-  const isImage = mimeType.startsWith('image/')
-
-  const contentParts: any[] = [
-    {
-      type: 'text',
-      text: `Analyse cette facture et extrais les informations en JSON strict.
-Réponds UNIQUEMENT avec du JSON valide, sans texte avant ou après, sans backticks.
-
-Format:
-{
-  "product_name": "nom complet",
-  "brand": "marque",
-  "model": "modèle",
-  "category": "Téléphone|Ordinateur|Tablette|TV / Écran|Audio|Photo / Vidéo|Console de jeux|Électroménager|Vélo / Trottinette|Mobilier|Outillage|Autre",
-  "purchase_date": "YYYY-MM-DD",
-  "purchase_price": 0,
-  "currency": "EUR",
-  "seller": "vendeur",
-  "order_number": "n° commande ou null",
-  "serial_number": "n° série ou null",
-  "standard_warranty_months": 24,
-  "extended_warranty_detected": false,
-  "extended_warranty_months": 0,
-  "confidence_score": 0.9,
-  "fields_to_confirm": []
-}
-
-Si extension de garantie détectée (AppleCare, +X ans, Garantie+, etc): extended_warranty_detected=true et remplis extended_warranty_months.`
-    },
-    isImage
-      ? { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
-      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-  ]
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANON_KEY,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: contentParts }],
-    }),
+    body: JSON.stringify({ file: base64, mimeType }),
   })
 
-  const data = await res.json()
-  const text = data.content?.[0]?.text || ''
-  return JSON.parse(text.replace(/```json|```/g, '').trim())
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Edge function error: ${err}`)
+  }
+
+  return res.json()
 }
 
 export default function ScanPage() {
@@ -120,7 +84,7 @@ export default function ScanPage() {
         setStep('confirm')
       } catch (err) {
         console.error('Extraction error:', err)
-        alert('Erreur lors de l\'analyse. Vérifiez votre connexion et réessayez.')
+        alert('Erreur lors de l\'analyse. Réessayez ou ajoutez manuellement.')
         setStep('upload')
       }
     }
@@ -164,7 +128,7 @@ export default function ScanPage() {
       resale_recommended: resale?.recommended || null,
     }).select().single()
 
-    if (error || !objData) { alert('Erreur lors de la sauvegarde : ' + error?.message); setStep('confirm'); return }
+    if (error || !objData) { alert('Erreur : ' + error?.message); setStep('confirm'); return }
 
     if (file) {
       const ext = file.name.split('.').pop()
@@ -236,7 +200,7 @@ export default function ScanPage() {
                   <div>
                     <p className="text-sm text-yellow-800 font-medium">Extension de garantie détectée</p>
                     <p className="text-sm text-yellow-700 mt-0.5">
-                      Extension de {extracted.extended_warranty_months} mois détectée. Confirmez-vous ?
+                      Extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?
                     </p>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }}
