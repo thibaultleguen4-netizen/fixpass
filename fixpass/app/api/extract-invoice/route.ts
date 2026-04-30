@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+export const maxDuration = 30
 
 export async function POST(req: NextRequest) {
-  const { file, mimeType } = await req.json()
+  try {
+    const { file, mimeType } = await req.json()
 
-  const isImage = mimeType.startsWith('image/')
-  const isPdf = mimeType === 'application/pdf'
+    if (!file || !mimeType) {
+      return NextResponse.json({ error: 'Fichier manquant' }, { status: 400 })
+    }
 
-  if (!isImage && !isPdf) {
-    return NextResponse.json({ error: 'Type de fichier non supporté' }, { status: 400 })
-  }
+    const isImage = mimeType.startsWith('image/')
+    const isPdf = mimeType === 'application/pdf'
 
-  const prompt = `Tu es un assistant spécialisé dans l'extraction d'informations de factures.
+    if (!isImage && !isPdf) {
+      return NextResponse.json({ error: 'Type non supporté' }, { status: 400 })
+    }
+
+    const prompt = `Tu es un assistant spécialisé dans l'extraction d'informations de factures.
 
 Analyse cette facture et extrais les informations suivantes en JSON strict.
 Réponds UNIQUEMENT avec du JSON valide, sans aucun texte avant ou après.
@@ -31,70 +35,87 @@ Format attendu :
   "order_number": "numéro de commande ou null",
   "serial_number": "numéro de série ou null",
   "standard_warranty_months": 24,
-  "extended_warranty_detected": true/false,
+  "extended_warranty_detected": true ou false,
   "extended_warranty_months": 0,
   "confidence_score": 0.0 à 1.0,
   "fields_to_confirm": ["liste des champs incertains"]
 }
 
-Important:
-- Si une extension de garantie est mentionnée (AppleCare, Garantie+, extension sérénité, etc.), mets extended_warranty_detected à true
+Règles importantes:
+- Si une extension de garantie est mentionnée (AppleCare, Garantie+, extension sérénité, +3 ans, etc.), mets extended_warranty_detected à true et remplis extended_warranty_months
 - Pour les produits neufs en France/UE, la garantie légale standard est de 24 mois
 - Mets dans fields_to_confirm les champs dont tu n'es pas sûr à plus de 85%
-- Si tu ne trouves pas une information, mets null`
+- Si tu ne trouves pas une information, mets null
+- La date doit être au format YYYY-MM-DD`
 
-  try {
-    const content: any[] = [{ type: 'text', text: prompt }]
+    const contentParts: any[] = [{ type: 'text', text: prompt }]
 
     if (isImage) {
-      content.push({
+      contentParts.push({
         type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mimeType,
-          data: file,
-        },
+        source: { type: 'base64', media_type: mimeType, data: file },
       })
     } else {
-      content.push({
+      contentParts.push({
         type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: file,
-        },
+        source: { type: 'base64', media_type: 'application/pdf', data: file },
       })
     }
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content }],
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: contentParts }],
+      }),
     })
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : ''
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error('Anthropic API error:', errText)
+      return NextResponse.json(emptyResult(), { status: 200 })
+    }
+
+    const data = await response.json()
+    const text = data.content?.[0]?.text || ''
     const clean = text.replace(/```json|```/g, '').trim()
-    const parsed = JSON.parse(clean)
 
-    return NextResponse.json(parsed)
+    try {
+      const parsed = JSON.parse(clean)
+      return NextResponse.json(parsed)
+    } catch {
+      console.error('JSON parse error:', clean)
+      return NextResponse.json(emptyResult(), { status: 200 })
+    }
+
   } catch (err) {
-    console.error('Extraction error:', err)
-    return NextResponse.json({
-      product_name: '',
-      brand: '',
-      model: '',
-      category: 'Autre',
-      purchase_date: null,
-      purchase_price: null,
-      currency: 'EUR',
-      seller: '',
-      order_number: null,
-      serial_number: null,
-      standard_warranty_months: 24,
-      extended_warranty_detected: false,
-      extended_warranty_months: 0,
-      confidence_score: 0,
-      fields_to_confirm: [],
-    })
+    console.error('Extract invoice error:', err)
+    return NextResponse.json(emptyResult(), { status: 200 })
+  }
+}
+
+function emptyResult() {
+  return {
+    product_name: '',
+    brand: '',
+    model: '',
+    category: '',
+    purchase_date: null,
+    purchase_price: null,
+    currency: 'EUR',
+    seller: '',
+    order_number: null,
+    serial_number: null,
+    standard_warranty_months: 24,
+    extended_warranty_detected: false,
+    extended_warranty_months: 0,
+    confidence_score: 0,
+    fields_to_confirm: [],
   }
 }
