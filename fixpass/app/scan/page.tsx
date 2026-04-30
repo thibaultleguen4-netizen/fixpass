@@ -33,6 +33,7 @@ export default function ScanPage() {
   const [extracted, setExtracted] = useState<ExtractedData | null>(null)
   const [form, setForm] = useState<any>({})
   const [file, setFile] = useState<File | null>(null)
+  const [extWarningDismissed, setExtWarningDismissed] = useState(false)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -178,7 +179,7 @@ export default function ScanPage() {
               <span className="text-sm text-green-700 font-medium">Analyse terminée — vérifiez les données extraites</span>
             </div>
 
-            {extracted.extended_warranty_detected && (
+            {extracted.extended_warranty_detected && !extWarningDismissed && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
                 <div className="flex items-start gap-2">
                   <AlertCircle size={16} className="text-yellow-600 mt-0.5 flex-shrink-0" />
@@ -188,11 +189,11 @@ export default function ScanPage() {
                       Nous avons détecté une possible extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?
                     </p>
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => set('extended_warranty_months', extracted.extended_warranty_months.toString())}
+                      <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }}
                         className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">
                         Confirmer
                       </button>
-                      <button onClick={() => set('extended_warranty_months', '0')}
+                      <button onClick={() => { set('extended_warranty_months', '0'); setExtWarningDismissed(true) }}
                         className="text-xs bg-white text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full">
                         Ignorer
                       </button>
@@ -204,20 +205,23 @@ export default function ScanPage() {
 
             <div className="card space-y-4">
               {[
-                { key: 'name', label: 'Produit', placeholder: 'iPhone 14' },
-                { key: 'brand', label: 'Marque', placeholder: 'Apple' },
-                { key: 'model', label: 'Modèle', placeholder: 'A2882' },
-                { key: 'seller', label: 'Vendeur', placeholder: 'Fnac' },
-                { key: 'order_number', label: 'N° commande', placeholder: 'FNAC-928381' },
-                { key: 'serial_number', label: 'N° de série', placeholder: 'SN...' },
-              ].map(({ key, label, placeholder }) => (
+                { key: 'name', label: 'Produit' },
+                { key: 'brand', label: 'Marque' },
+                { key: 'model', label: 'Modèle' },
+                { key: 'seller', label: 'Vendeur' },
+                { key: 'order_number', label: 'N° commande' },
+                { key: 'serial_number', label: 'N° de série' },
+              ].map(({ key, label }) => (
                 <div key={key}>
                   <label className="label flex items-center gap-2">
                     {label}
                     {needsConfirm(key) && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">À vérifier</span>}
                   </label>
-                  <input className={`input ${needsConfirm(key) ? 'border-yellow-300 focus:ring-yellow-400' : ''}`}
-                    value={form[key] || ''} onChange={e => set(key, e.target.value)} placeholder={placeholder} />
+                  <input
+                    className={`input ${needsConfirm(key) ? 'border-yellow-300 focus:ring-yellow-400' : ''}`}
+                    value={form[key] || ''}
+                    onChange={e => set(key, e.target.value)}
+                  />
                 </div>
               ))}
 
