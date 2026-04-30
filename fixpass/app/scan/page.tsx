@@ -29,14 +29,32 @@ interface ExtractedData {
   confidence_score: number
 }
 
+async function extractTextFromPDF(base64: string): Promise<string> {
+  try {
+    const binary = atob(base64)
+    const text = binary.replace(/[^\x20-\x7E\n\r\t\u00C0-\u024F]/g, ' ')
+    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(l => l.length > 3)
+    return lines.slice(0, 200).join('\n')
+  } catch {
+    return ''
+  }
+}
+
 async function extractFromFile(base64: string, mimeType: string): Promise<ExtractedData> {
+  const isPdf = mimeType === 'application/pdf'
+  let textContent = ''
+
+  if (isPdf) {
+    textContent = await extractTextFromPDF(base64)
+  }
+
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify({ file: base64, mimeType }),
+    body: JSON.stringify({ file: base64, mimeType, textContent }),
   })
 
   if (!res.ok) {
