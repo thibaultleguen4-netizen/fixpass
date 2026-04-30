@@ -9,6 +9,9 @@ import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/li
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
 import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench } from 'lucide-react'
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
 export default function ObjectDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -41,9 +44,12 @@ export default function ObjectDetailPage() {
     if (!obj) return
     setGeneratingAnnonce(true)
     try {
-      const res = await fetch('/api/generate-annonce', {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-annonce`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
         body: JSON.stringify({ object: obj }),
       })
       const data = await res.json()
@@ -74,7 +80,6 @@ export default function ObjectDetailPage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
-        {/* Hero card */}
         <div className="card">
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">
@@ -93,7 +98,6 @@ export default function ObjectDetailPage() {
           </div>
         </div>
 
-        {/* Achat */}
         <div className="card space-y-2">
           <h3 className="font-semibold text-gray-900 text-sm">Achat</h3>
           {[
@@ -111,7 +115,6 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
-        {/* Garantie */}
         <div className={`card space-y-2 border-l-4 ${
           obj.warranty_status === 'active' ? 'border-l-green-400' :
           obj.warranty_status === 'expiring_soon' ? 'border-l-yellow-400' : 'border-l-red-300'
@@ -130,7 +133,6 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
-        {/* Revente */}
         {obj.resale_recommended && (
           <div className="card space-y-2">
             <h3 className="font-semibold text-gray-900 text-sm">Estimation de revente</h3>
@@ -151,7 +153,6 @@ export default function ObjectDetailPage() {
           </div>
         )}
 
-        {/* Générer annonce */}
         <div className="card space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
             <FileText size={16} /> Annonce de revente
@@ -171,7 +172,6 @@ export default function ObjectDetailPage() {
           )}
         </div>
 
-        {/* Réparations */}
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
@@ -199,7 +199,6 @@ export default function ObjectDetailPage() {
           )}
         </div>
 
-        {/* Notes */}
         {obj.notes && (
           <div className="card">
             <h3 className="font-semibold text-gray-900 text-sm mb-2">Notes</h3>
