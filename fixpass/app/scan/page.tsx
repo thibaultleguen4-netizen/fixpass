@@ -8,6 +8,8 @@ import { CATEGORIES } from '@/lib/types'
 import { computeWarrantyEndDate, computeWarrantyStatus, computeResaleEstimate } from '@/lib/utils'
 import { ArrowLeft, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 
+const ANON_KEY = process.env.NEXT_PUBLIC_ANTHROPIC_KEY || ''
+
 interface ExtractedData {
   product_name: string
   brand: string
@@ -24,6 +26,61 @@ interface ExtractedData {
   extended_warranty_months: number
   fields_to_confirm: string[]
   confidence_score: number
+}
+
+async function extractFromFile(base64: string, mimeType: string): Promise<ExtractedData> {
+  const isImage = mimeType.startsWith('image/')
+
+  const contentParts: any[] = [
+    {
+      type: 'text',
+      text: `Analyse cette facture et extrais les informations en JSON strict.
+Réponds UNIQUEMENT avec du JSON valide, sans texte avant ou après, sans backticks.
+
+Format:
+{
+  "product_name": "nom complet",
+  "brand": "marque",
+  "model": "modèle",
+  "category": "Téléphone|Ordinateur|Tablette|TV / Écran|Audio|Photo / Vidéo|Console de jeux|Électroménager|Vélo / Trottinette|Mobilier|Outillage|Autre",
+  "purchase_date": "YYYY-MM-DD",
+  "purchase_price": 0,
+  "currency": "EUR",
+  "seller": "vendeur",
+  "order_number": "n° commande ou null",
+  "serial_number": "n° série ou null",
+  "standard_warranty_months": 24,
+  "extended_warranty_detected": false,
+  "extended_warranty_months": 0,
+  "confidence_score": 0.9,
+  "fields_to_confirm": []
+}
+
+Si extension de garantie détectée (AppleCare, +X ans, Garantie+, etc): extended_warranty_detected=true et remplis extended_warranty_months.`
+    },
+    isImage
+      ? { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+  ]
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANON_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: contentParts }],
+    }),
+  })
+
+  const data = await res.json()
+  const text = data.content?.[0]?.text || ''
+  return JSON.parse(text.replace(/```json|```/g, '').trim())
 }
 
 export default function ScanPage() {
@@ -45,12 +102,7 @@ export default function ScanPage() {
     reader.onload = async (ev) => {
       const base64 = (ev.target?.result as string).split(',')[1]
       try {
-        const res = await fetch('/api/extract-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file: base64, mimeType: f.type }),
-        })
-        const data = await res.json()
+        const data = await extractFromFile(base64, f.type)
         setExtracted(data)
         setForm({
           name: data.product_name || '',
@@ -66,8 +118,9 @@ export default function ScanPage() {
           extended_warranty_months: data.extended_warranty_months?.toString() || '0',
         })
         setStep('confirm')
-      } catch {
-        alert('Erreur lors de l\'analyse. Réessayez ou ajoutez l\'objet manuellement.')
+      } catch (err) {
+        console.error('Extraction error:', err)
+        alert('Erreur lors de l\'analyse. Vérifiez votre connexion et réessayez.')
         setStep('upload')
       }
     }
@@ -111,7 +164,7 @@ export default function ScanPage() {
       resale_recommended: resale?.recommended || null,
     }).select().single()
 
-    if (error || !objData) { alert('Erreur lors de la sauvegarde.'); setStep('confirm'); return }
+    if (error || !objData) { alert('Erreur lors de la sauvegarde : ' + error?.message); setStep('confirm'); return }
 
     if (file) {
       const ext = file.name.split('.').pop()
@@ -145,7 +198,6 @@ export default function ScanPage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 py-6">
-
         {step === 'upload' && (
           <div className="space-y-4">
             <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
@@ -158,9 +210,7 @@ export default function ScanPage() {
               <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileChange} />
             </label>
             <div className="text-center text-gray-400 text-sm">— ou —</div>
-            <Link href="/objects/new" className="btn-secondary w-full text-center block">
-              Ajouter manuellement
-            </Link>
+            <Link href="/objects/new" className="btn-secondary w-full text-center block">Ajouter manuellement</Link>
           </div>
         )}
 
@@ -168,7 +218,7 @@ export default function ScanPage() {
           <div className="card text-center py-12">
             <div className="text-4xl mb-4 animate-pulse">🔍</div>
             <p className="font-semibold text-gray-900">Analyse en cours...</p>
-            <p className="text-sm text-gray-500 mt-2">L'IA lit votre facture et extrait les informations</p>
+            <p className="text-sm text-gray-500 mt-2">L'IA lit votre facture, patientez 10-15 secondes</p>
           </div>
         )}
 
@@ -186,17 +236,13 @@ export default function ScanPage() {
                   <div>
                     <p className="text-sm text-yellow-800 font-medium">Extension de garantie détectée</p>
                     <p className="text-sm text-yellow-700 mt-0.5">
-                      Nous avons détecté une possible extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?
+                      Extension de {extracted.extended_warranty_months} mois détectée. Confirmez-vous ?
                     </p>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }}
-                        className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">
-                        Confirmer
-                      </button>
+                        className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">Confirmer</button>
                       <button onClick={() => { set('extended_warranty_months', '0'); setExtWarningDismissed(true) }}
-                        className="text-xs bg-white text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full">
-                        Ignorer
-                      </button>
+                        className="text-xs bg-white text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full">Ignorer</button>
                     </div>
                   </div>
                 </div>
@@ -217,11 +263,8 @@ export default function ScanPage() {
                     {label}
                     {needsConfirm(key) && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">À vérifier</span>}
                   </label>
-                  <input
-                    className={`input ${needsConfirm(key) ? 'border-yellow-300 focus:ring-yellow-400' : ''}`}
-                    value={form[key] || ''}
-                    onChange={e => set(key, e.target.value)}
-                  />
+                  <input className={`input ${needsConfirm(key) ? 'border-yellow-300' : ''}`}
+                    value={form[key] || ''} onChange={e => set(key, e.target.value)} />
                 </div>
               ))}
 
@@ -250,18 +293,13 @@ export default function ScanPage() {
                   <input className="input" type="number" value={form.warranty_months} onChange={e => set('warranty_months', e.target.value)} />
                 </div>
                 <div>
-                  <label className="label flex items-center gap-1">
-                    Extension
-                    {needsConfirm('extended_warranty_months') && <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 rounded-full">⚠</span>}
-                  </label>
+                  <label className="label">Extension (mois)</label>
                   <input className="input" type="number" value={form.extended_warranty_months} onChange={e => set('extended_warranty_months', e.target.value)} />
                 </div>
               </div>
             </div>
 
-            <button onClick={handleSave} className="btn-primary w-full py-3">
-              Créer la fiche objet →
-            </button>
+            <button onClick={handleSave} className="btn-primary w-full py-3">Créer la fiche objet →</button>
           </div>
         )}
 
