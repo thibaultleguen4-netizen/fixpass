@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem, Repair } from '@/lib/types'
 import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench } from 'lucide-react'
+import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -21,6 +21,9 @@ export default function ObjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [annonce, setAnnonce] = useState('')
   const [generatingAnnonce, setGeneratingAnnonce] = useState(false)
+  const [estimating, setEstimating] = useState(false)
+  const [marketContext, setMarketContext] = useState('')
+  const [platforms, setPlatforms] = useState<string[]>([])
 
   useEffect(() => {
     const load = async () => {
@@ -60,6 +63,51 @@ export default function ObjectDetailPage() {
     setGeneratingAnnonce(false)
   }
 
+  const updateResaleEstimate = async () => {
+    if (!obj) return
+    setEstimating(true)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          name: obj.name,
+          brand: obj.brand,
+          model: obj.model,
+          category: obj.category,
+          purchase_date: obj.purchase_date,
+          purchase_price: obj.purchase_price,
+          condition: obj.condition,
+        }),
+      })
+      const data = await res.json()
+
+      if (data.resale_recommended) {
+        await supabase.from('objects').update({
+          resale_min: data.resale_min,
+          resale_max: data.resale_max,
+          resale_recommended: data.resale_recommended,
+        }).eq('id', obj.id)
+
+        setObj(prev => prev ? {
+          ...prev,
+          resale_min: data.resale_min,
+          resale_max: data.resale_max,
+          resale_recommended: data.resale_recommended,
+        } : null)
+
+        setMarketContext(data.market_context || '')
+        setPlatforms(data.platforms || [])
+      }
+    } catch (err) {
+      alert('Erreur lors de l\'estimation.')
+    }
+    setEstimating(false)
+  }
+
   if (loading || !obj) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-400">Chargement...</div></div>
   }
@@ -80,6 +128,7 @@ export default function ObjectDetailPage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+
         <div className="card">
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">
@@ -133,25 +182,50 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
-        {obj.resale_recommended && (
-          <div className="card space-y-2">
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm">Estimation de revente</h3>
-            <div className="grid grid-cols-3 gap-3 mt-2">
-              {[
-                ['Vente rapide', obj.resale_min, false],
-                ['Recommandé', obj.resale_recommended, true],
-                ['Ambitieux', obj.resale_max, false],
-              ].map(([label, val, highlight]) => (
-                <div key={label as string} className={`rounded-xl p-3 text-center ${highlight ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50'}`}>
-                  <div className={`text-lg font-bold ${highlight ? 'text-teal-700' : 'text-gray-900'}`}>
-                    {formatPrice(val as number)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">{label as string}</div>
-                </div>
-              ))}
-            </div>
+            <button onClick={updateResaleEstimate} disabled={estimating}
+              className="flex items-center gap-1.5 text-xs text-teal-600 font-medium hover:underline">
+              <RefreshCw size={12} className={estimating ? 'animate-spin' : ''} />
+              {estimating ? 'Analyse...' : 'Actualiser via IA'}
+            </button>
           </div>
-        )}
+
+          {obj.resale_recommended ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  ['Vente rapide', obj.resale_min, false],
+                  ['Recommandé', obj.resale_recommended, true],
+                  ['Ambitieux', obj.resale_max, false],
+                ].map(([label, val, highlight]) => (
+                  <div key={label as string} className={`rounded-xl p-3 text-center ${highlight ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50'}`}>
+                    <div className={`text-lg font-bold ${highlight ? 'text-teal-700' : 'text-gray-900'}`}>
+                      {formatPrice(val as number)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">{label as string}</div>
+                  </div>
+                ))}
+              </div>
+              {marketContext && (
+                <p className="text-xs text-gray-500 italic">{marketContext}</p>
+              )}
+              {platforms.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs text-gray-400">Vendre sur :</span>
+                  {platforms.map(p => (
+                    <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p}</span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <button onClick={updateResaleEstimate} disabled={estimating} className="btn-primary w-full">
+              {estimating ? 'Analyse du marché...' : '💶 Estimer la valeur de revente'}
+            </button>
+          )}
+        </div>
 
         <div className="card space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
