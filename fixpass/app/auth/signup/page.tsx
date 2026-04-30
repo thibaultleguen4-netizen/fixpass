@@ -13,7 +13,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,20 +27,8 @@ export default function SignupPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      setSuccess(true)
+      router.push('/dashboard')
     }
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-sm text-center card">
-          <div className="text-4xl mb-4">📬</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Vérifiez vos emails</h2>
-          <p className="text-gray-500 text-sm">Un lien de confirmation vous a été envoyé à <strong>{email}</strong>. Cliquez dessus pour activer votre compte.</p>
-        </div>
-      </div>
-    )
   }
 
   return (
