@@ -73,7 +73,7 @@ export default function ObjectDetailPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({
+      body: JSON.stringify({
           name: obj.name,
           brand: obj.brand,
           model: obj.model,
@@ -81,6 +81,12 @@ export default function ObjectDetailPage() {
           purchase_date: obj.purchase_date,
           purchase_price: obj.purchase_price,
           condition: obj.condition,
+          repairs: repairs.map(r => ({
+            title: r.title,
+            date: r.repair_date,
+            cost: r.cost,
+            description: r.description,
+          })),
         }),
       })
       const data = await res.json()
