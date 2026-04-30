@@ -65,6 +65,7 @@ export default function ObjectDetailPage() {
 
   const updateResaleEstimate = async () => {
     if (!obj) return
+    console.log('Repairs envoyées:', repairs)
     setEstimating(true)
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
