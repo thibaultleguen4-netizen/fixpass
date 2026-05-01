@@ -29,35 +29,53 @@ interface ExtractedData {
   confidence_score: number
 }
 
-async function extractTextFromPDF(base64: string): Promise<string> {
-  try {
-    const binary = atob(base64)
-    const text = binary.replace(/[^\x20-\x7E\n\r\t\u00C0-\u024F]/g, ' ')
-    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(l => l.length > 3)
-    return lines.slice(0, 200).join('\n')
-  } catch {
-    return ''
+async function convertPdfToImages(file: File): Promise<string[]> {
+  const pdfjsLib = (window as any).pdfjsLib
+  if (!pdfjsLib) throw new Error('PDF.js non chargé')
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const images: string[] = []
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 2.0 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+    const ctx = canvas.getContext('2d')!
+    await page.render({ canvasContext: ctx, viewport }).promise
+    const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+    images.push(base64)
   }
+
+  return images
 }
 
-async function extractFromFile(base64: string, mimeType: string): Promise<ExtractedData> {
-  const isPdf = mimeType === 'application/pdf'
-  let textContent = ''
-  if (isPdf) {
-    textContent = await extractTextFromPDF(base64)
+async function extractFromFile(base64Images: string[], mimeType: string, originalFile: File): Promise<ExtractedData> {
+  let images = base64Images
+
+  // Si PDF, convertir en images
+  if (mimeType === 'application/pdf') {
+    images = await convertPdfToImages(originalFile)
   }
+
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify({ file: base64, mimeType, textContent }),
+    body: JSON.stringify({
+      images,
+      mimeType: 'image/jpeg',
+      isPdf: mimeType === 'application/pdf',
+    }),
   })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Edge function error: ${err}`)
-  }
+
+  if (!res.ok) throw new Error(`Edge function error: ${await res.text()}`)
   return res.json()
 }
 
@@ -69,40 +87,61 @@ export default function ScanPage() {
   const [form, setForm] = useState<any>({})
   const [file, setFile] = useState<File | null>(null)
   const [extWarningDismissed, setExtWarningDismissed] = useState(false)
+  const [pdfLoaded, setPdfLoaded] = useState(false)
+
+  // Charger PDF.js dynamiquement
+  const loadPdfJs = () => new Promise<void>((resolve) => {
+    if ((window as any).pdfjsLib) { resolve(); return }
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+    script.onload = () => { setPdfLoaded(true); resolve() }
+    document.head.appendChild(script)
+  })
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (!f) return
     setFile(f)
     setStep('analyzing')
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      const base64 = (ev.target?.result as string).split(',')[1]
-      try {
-        const data = await extractFromFile(base64, f.type)
-        setExtracted(data)
-        setForm({
-          name: data.product_name || '',
-          brand: data.brand || '',
-          model: data.model || '',
-          category: data.category || '',
-          purchase_date: data.purchase_date || '',
-          purchase_price: data.purchase_price?.toString() || '',
-          seller: data.seller || '',
-          order_number: data.order_number || '',
-          serial_number: data.serial_number || '',
-          warranty_months: data.standard_warranty_months?.toString() || '24',
-          extended_warranty_months: data.extended_warranty_months?.toString() || '0',
-          condition: 'good',
-        })
-        setStep('confirm')
-      } catch (err) {
-        console.error('Extraction error:', err)
-        alert('Erreur lors de l\'analyse. Réessayez ou ajoutez manuellement.')
-        setStep('upload')
+
+    try {
+      const isPdf = f.type === 'application/pdf'
+
+      if (isPdf) await loadPdfJs()
+
+      const reader = new FileReader()
+      reader.onload = async (ev) => {
+        const base64 = (ev.target?.result as string).split(',')[1]
+        try {
+          const data = await extractFromFile([base64], f.type, f)
+          setExtracted(data)
+          setForm({
+            name: data.product_name || '',
+            brand: data.brand || '',
+            model: data.model || '',
+            category: data.category || '',
+            purchase_date: data.purchase_date || '',
+            purchase_price: data.purchase_price?.toString() || '',
+            seller: data.seller || '',
+            order_number: data.order_number || '',
+            serial_number: data.serial_number || '',
+            warranty_months: data.standard_warranty_months?.toString() || '24',
+            extended_warranty_months: data.extended_warranty_months?.toString() || '0',
+            condition: 'good',
+          })
+          setStep('confirm')
+        } catch (err) {
+          console.error('Extraction error:', err)
+          alert('Erreur lors de l\'analyse. Réessayez ou ajoutez manuellement.')
+          setStep('upload')
+        }
       }
+      reader.readAsDataURL(f)
+    } catch (err) {
+      console.error('PDF load error:', err)
+      alert('Erreur lors du chargement du PDF.')
+      setStep('upload')
     }
-    reader.readAsDataURL(f)
   }
 
   const handleSave = async () => {
@@ -196,7 +235,11 @@ export default function ScanPage() {
           <div className="card text-center py-12">
             <div className="text-4xl mb-4 animate-pulse">🔍</div>
             <p className="font-semibold text-gray-900">Analyse en cours...</p>
-            <p className="text-sm text-gray-500 mt-2">L'IA lit votre facture, patientez 10-15 secondes</p>
+            <p className="text-sm text-gray-500 mt-2">
+              {file?.type === 'application/pdf'
+                ? 'Conversion du PDF en cours, puis analyse IA...'
+                : 'L\'IA lit votre facture, patientez 10-15 secondes'}
+            </p>
           </div>
         )}
 
@@ -286,7 +329,6 @@ export default function ScanPage() {
                   <option value="poor">Mauvais état</option>
                 </select>
               </div>
-
             </div>
 
             <button onClick={handleSave} className="btn-primary w-full py-3">Créer la fiche objet →</button>
