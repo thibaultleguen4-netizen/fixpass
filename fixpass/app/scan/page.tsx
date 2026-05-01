@@ -1,4 +1,4 @@
-'use client'
+a'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -32,13 +32,10 @@ interface ExtractedData {
 async function convertPdfToImages(file: File): Promise<string[]> {
   const pdfjsLib = (window as any).pdfjsLib
   if (!pdfjsLib) throw new Error('PDF.js non chargé')
-
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const images: string[] = []
-
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const viewport = page.getViewport({ scale: 2.0 })
@@ -50,30 +47,19 @@ async function convertPdfToImages(file: File): Promise<string[]> {
     const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
     images.push(base64)
   }
-
   return images
 }
 
 async function extractFromFile(base64Images: string[], mimeType: string, originalFile: File): Promise<ExtractedData> {
   let images = base64Images
-
   if (mimeType === 'application/pdf') {
     images = await convertPdfToImages(originalFile)
   }
-
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({
-      images,
-      mimeType: 'image/jpeg',
-      isPdf: mimeType === 'application/pdf',
-    }),
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ images, mimeType: 'image/jpeg', isPdf: mimeType === 'application/pdf' }),
   })
-
   if (!res.ok) throw new Error(`Edge function error: ${await res.text()}`)
   return res.json()
 }
@@ -81,7 +67,7 @@ async function extractFromFile(base64Images: string[], mimeType: string, origina
 export default function ScanPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [step, setStep] = useState<'upload' | 'analyzing' | 'confirm' | 'saving'>('upload')
+  const [step, setStep] = useState<'upload' | 'analyzing' | 'confirm' | 'saving' | 'estimating'>('upload')
   const [extracted, setExtracted] = useState<ExtractedData | null>(null)
   const [form, setForm] = useState<any>({})
   const [file, setFile] = useState<File | null>(null)
@@ -101,11 +87,9 @@ export default function ScanPage() {
     if (!f) return
     setFile(f)
     setStep('analyzing')
-
     try {
       const isPdf = f.type === 'application/pdf'
       if (isPdf) await loadPdfJs()
-
       const reader = new FileReader()
       reader.onload = async (ev) => {
         const base64 = (ev.target?.result as string).split(',')[1]
@@ -198,25 +182,28 @@ export default function ScanPage() {
       }
     }
 
-    // Lancer estimation IA en arrière-plan
-    fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({
-        name: objData.name, brand: objData.brand, model: objData.model,
-        category: objData.category, purchase_date: objData.purchase_date,
-        purchase_price: objData.purchase_price, condition: objData.condition,
-        repairs: [],
-      }),
-    }).then(r => r.json()).then(data => {
-      if (data.resale_recommended) {
-        supabase.from('objects').update({
-          resale_min: data.resale_min,
-          resale_max: data.resale_max,
-          resale_recommended: data.resale_recommended,
+    // Attendre l'estimation IA avant de rediriger
+    setStep('estimating')
+    try {
+      const estimateRes = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          name: objData.name, brand: objData.brand, model: objData.model,
+          category: objData.category, purchase_date: objData.purchase_date,
+          purchase_price: objData.purchase_price, condition: objData.condition,
+          repairs: [],
+        }),
+      })
+      const estimateData = await estimateRes.json()
+      if (estimateData.resale_recommended) {
+        await supabase.from('objects').update({
+          resale_min: estimateData.resale_min,
+          resale_max: estimateData.resale_max,
+          resale_recommended: estimateData.resale_recommended,
         }).eq('id', objData.id)
       }
-    }).catch(() => {})
+    } catch {}
 
     router.push(`/objects/${objData.id}`)
   }
@@ -253,9 +240,7 @@ export default function ScanPage() {
             <div className="text-4xl mb-4 animate-pulse">🔍</div>
             <p className="font-semibold text-gray-900">Analyse en cours...</p>
             <p className="text-sm text-gray-500 mt-2">
-              {file?.type === 'application/pdf'
-                ? 'Conversion du PDF en cours, puis analyse IA...'
-                : 'L\'IA lit votre facture, patientez 10-15 secondes'}
+              {file?.type === 'application/pdf' ? 'Conversion du PDF, puis analyse IA...' : 'L\'IA lit votre facture...'}
             </p>
           </div>
         )}
@@ -273,9 +258,7 @@ export default function ScanPage() {
                   <AlertCircle size={16} className="text-yellow-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-yellow-800 font-medium">Extension de garantie détectée</p>
-                    <p className="text-sm text-yellow-700 mt-0.5">
-                      Extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?
-                    </p>
+                    <p className="text-sm text-yellow-700 mt-0.5">Extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?</p>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }}
                         className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">Confirmer</button>
@@ -352,11 +335,17 @@ export default function ScanPage() {
           </div>
         )}
 
-        {step === 'saving' && (
+        {(step === 'saving' || step === 'estimating') && (
           <div className="card text-center py-12">
-            <div className="text-4xl mb-4 animate-pulse">💾</div>
-            <p className="font-semibold text-gray-900">Sauvegarde en cours...</p>
-            <p className="text-sm text-gray-500 mt-2">Estimation de la valeur de revente...</p>
+            <div className="text-4xl mb-4 animate-pulse">
+              {step === 'saving' ? '💾' : '💶'}
+            </div>
+            <p className="font-semibold text-gray-900">
+              {step === 'saving' ? 'Sauvegarde en cours...' : 'Estimation de la valeur de revente...'}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              {step === 'saving' ? 'Enregistrement de votre objet' : 'L\'IA analyse le marché français, patientez...'}
+            </p>
           </div>
         )}
       </div>
