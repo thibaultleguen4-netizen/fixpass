@@ -16,6 +16,7 @@ interface RepairabilityData {
   score: number
   level: string
   summary: string
+  software_label?: string
   criteria: {
     documentation: number
     spare_parts: number
@@ -239,7 +240,7 @@ export default function ObjectDetailPage() {
     documentation: 'Documentation',
     spare_parts: 'Pièces détachées',
     disassembly: 'Démontage',
-    software: 'Logiciel',
+    software: repairability?.software_label || 'Logiciel',
     parts_price: 'Prix des pièces',
   }
 
@@ -332,7 +333,6 @@ export default function ObjectDetailPage() {
 
           {repairability ? (
             <div className="space-y-3">
-              {/* Score principal */}
               <div className={`rounded-xl p-4 ${getRepairabilityColor(repairability.score).bg} border ${getRepairabilityColor(repairability.score).border}`}>
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-3xl font-bold ${getRepairabilityColor(repairability.score).text}`}>
@@ -349,7 +349,6 @@ export default function ObjectDetailPage() {
                 <p className="text-xs text-gray-600">{repairability.summary}</p>
               </div>
 
-              {/* Critères détaillés */}
               <div className="space-y-2">
                 {Object.entries(repairability.criteria).map(([key, val]) => (
                   <div key={key} className="flex items-center gap-3">
@@ -363,7 +362,6 @@ export default function ObjectDetailPage() {
                 ))}
               </div>
 
-              {/* Réparations courantes */}
               {repairability.common_repairs.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-gray-700 mb-1.5">Réparations courantes :</p>
@@ -375,7 +373,6 @@ export default function ObjectDetailPage() {
                 </div>
               )}
 
-              {/* Conseils */}
               {repairability.tips.length > 0 && (
                 <div className="bg-blue-50 rounded-xl p-3">
                   <p className="text-xs font-medium text-blue-800 mb-1">💡 Conseils</p>
