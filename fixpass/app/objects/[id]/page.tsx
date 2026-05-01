@@ -7,10 +7,25 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem, Repair, Document } from '@/lib/types'
 import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw, Download, Eye, Paperclip, X, Upload } from 'lucide-react'
+import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw, Download, Eye, Paperclip, X, Upload, Hammer } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+interface RepairabilityData {
+  score: number
+  level: string
+  summary: string
+  criteria: {
+    documentation: number
+    spare_parts: number
+    disassembly: number
+    software: number
+    parts_price: number
+  }
+  tips: string[]
+  common_repairs: string[]
+}
 
 export default function ObjectDetailPage() {
   const router = useRouter()
@@ -26,6 +41,8 @@ export default function ObjectDetailPage() {
   const [estimating, setEstimating] = useState(false)
   const [marketContext, setMarketContext] = useState('')
   const [platforms, setPlatforms] = useState<string[]>([])
+  const [repairability, setRepairability] = useState<RepairabilityData | null>(null)
+  const [loadingRepairability, setLoadingRepairability] = useState(false)
 
   const [showRepairForm, setShowRepairForm] = useState(false)
   const [repairForm, setRepairForm] = useState({ title: '', description: '', repair_date: '', cost: '', provider: '' })
@@ -79,12 +96,8 @@ export default function ObjectDetailPage() {
         if (!uploadError) {
           const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
           const { data: docData } = await supabase.from('documents').insert({
-            object_id: objectId, user_id: user.id,
-            type: 'other',
-            file_url: publicUrl,
-            file_name: repairFile.name,
-            mime_type: repairFile.type,
-            extraction_status: 'done',
+            object_id: objectId, user_id: user.id, type: 'other',
+            file_url: publicUrl, file_name: repairFile.name, mime_type: repairFile.type, extraction_status: 'done',
           }).select().single()
           if (docData) setDocuments(prev => [docData, ...prev])
         }
@@ -94,10 +107,26 @@ export default function ObjectDetailPage() {
       setRepairForm({ title: '', description: '', repair_date: '', cost: '', provider: '' })
       setRepairFile(null)
       setShowRepairForm(false)
-    } catch (err) {
-      alert('Erreur inattendue.')
-    }
+    } catch { alert('Erreur inattendue.') }
     setSavingRepair(false)
+  }
+
+  const loadRepairability = async () => {
+    if (!obj) return
+    setLoadingRepairability(true)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/repairability-score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          name: obj.name, brand: obj.brand, model: obj.model,
+          category: obj.category, purchase_date: obj.purchase_date,
+        }),
+      })
+      const data = await res.json()
+      setRepairability(data)
+    } catch { alert('Erreur lors du calcul.') }
+    setLoadingRepairability(false)
   }
 
   const generateAnnonce = async () => {
@@ -200,6 +229,20 @@ export default function ObjectDetailPage() {
   const getDocumentIcon = (type: string) => ({ receipt: '🧾', photo: '📷', manual: '📖', warranty: '🛡️' }[type] || '📄')
   const getDocumentLabel = (type: string) => ({ receipt: 'Facture', photo: 'Photo', manual: 'Manuel', warranty: 'Garantie' }[type] || 'Document')
 
+  const getRepairabilityColor = (score: number) => {
+    if (score >= 7) return { bar: 'bg-green-400', text: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' }
+    if (score >= 5) return { bar: 'bg-yellow-400', text: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200' }
+    return { bar: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' }
+  }
+
+  const criteriaLabels: Record<string, string> = {
+    documentation: 'Documentation',
+    spare_parts: 'Pièces détachées',
+    disassembly: 'Démontage',
+    software: 'Logiciel',
+    parts_price: 'Prix des pièces',
+  }
+
   if (loading || !obj) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-400">Chargement...</div></div>
   }
@@ -270,6 +313,83 @@ export default function ObjectDetailPage() {
               <span className="text-gray-900 font-medium">{v}</span>
             </div>
           ))}
+        </div>
+
+        {/* Indice de réparabilité */}
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+              <Hammer size={16} /> Indice de réparabilité
+            </h3>
+            {repairability && (
+              <button onClick={loadRepairability} disabled={loadingRepairability}
+                className="flex items-center gap-1.5 text-xs text-teal-600 font-medium hover:underline">
+                <RefreshCw size={12} className={loadingRepairability ? 'animate-spin' : ''} />
+                Actualiser
+              </button>
+            )}
+          </div>
+
+          {repairability ? (
+            <div className="space-y-3">
+              {/* Score principal */}
+              <div className={`rounded-xl p-4 ${getRepairabilityColor(repairability.score).bg} border ${getRepairabilityColor(repairability.score).border}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-3xl font-bold ${getRepairabilityColor(repairability.score).text}`}>
+                    {repairability.score}/10
+                  </span>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${getRepairabilityColor(repairability.score).bg} ${getRepairabilityColor(repairability.score).text} border ${getRepairabilityColor(repairability.score).border}`}>
+                    {repairability.score >= 7 ? '🟢 Facile à réparer' : repairability.score >= 5 ? '🟡 Réparable' : '🔴 Difficile à réparer'}
+                  </span>
+                </div>
+                <div className="w-full bg-white rounded-full h-2 mb-2">
+                  <div className={`h-2 rounded-full ${getRepairabilityColor(repairability.score).bar}`}
+                    style={{ width: `${repairability.score * 10}%` }} />
+                </div>
+                <p className="text-xs text-gray-600">{repairability.summary}</p>
+              </div>
+
+              {/* Critères détaillés */}
+              <div className="space-y-2">
+                {Object.entries(repairability.criteria).map(([key, val]) => (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500 w-36 flex-shrink-0">{criteriaLabels[key]}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                      <div className={`h-1.5 rounded-full ${getRepairabilityColor(val).bar}`}
+                        style={{ width: `${val * 10}%` }} />
+                    </div>
+                    <span className="text-xs font-medium text-gray-700 w-6 text-right">{val}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Réparations courantes */}
+              {repairability.common_repairs.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-gray-700 mb-1.5">Réparations courantes :</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {repairability.common_repairs.map(r => (
+                      <span key={r} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{r}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Conseils */}
+              {repairability.tips.length > 0 && (
+                <div className="bg-blue-50 rounded-xl p-3">
+                  <p className="text-xs font-medium text-blue-800 mb-1">💡 Conseils</p>
+                  {repairability.tips.map(tip => (
+                    <p key={tip} className="text-xs text-blue-700 mt-0.5">• {tip}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button onClick={loadRepairability} disabled={loadingRepairability} className="btn-primary w-full">
+              {loadingRepairability ? 'Calcul en cours...' : '🔧 Calculer l\'indice de réparabilité'}
+            </button>
+          )}
         </div>
 
         {/* Documents */}
@@ -393,8 +513,6 @@ export default function ObjectDetailPage() {
                 <label className="label">Description</label>
                 <textarea className="input h-20 resize-none" value={repairForm.description} onChange={e => setRepairForm(f => ({...f, description: e.target.value}))} placeholder="Détails..." />
               </div>
-
-              {/* Upload facture réparation */}
               <div>
                 <label className="label">Facture de réparation (optionnel)</label>
                 {repairFile ? (
@@ -416,7 +534,6 @@ export default function ObjectDetailPage() {
                   </label>
                 )}
               </div>
-
               <button type="submit" disabled={savingRepair} className="btn-primary w-full py-2 text-sm">
                 {savingRepair ? 'Enregistrement...' : 'Ajouter la réparation'}
               </button>
