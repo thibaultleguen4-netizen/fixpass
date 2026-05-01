@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
-import { formatPrice, formatDate, getCategoryEmoji } from '@/lib/utils'
-import { ArrowLeft, FileText, Download, AlertTriangle } from 'lucide-react'
+import { formatPrice, getCategoryEmoji } from '@/lib/utils'
+import { ArrowLeft, FileText, AlertTriangle } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,10 +18,14 @@ const SINISTRE_TYPES = [
   { key: 'other', label: 'Autre sinistre', emoji: '⚡' },
 ]
 
+interface ObjectWithDoc extends ObjectItem {
+  document_url?: string
+}
+
 export default function SinisterPage() {
   const router = useRouter()
   const supabase = createClient()
-  const [objects, setObjects] = useState<ObjectItem[]>([])
+  const [objects, setObjects] = useState<ObjectWithDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [sinistreType, setSinistreType] = useState('theft')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -33,11 +37,42 @@ export default function SinisterPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
       setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utilisateur')
-      const { data } = await supabase.from('objects').select('*').order('purchase_price', { ascending: false })
-      if (data) {
-        setObjects(data)
-        setSelectedIds(new Set(data.map(o => o.id)))
-      }
+
+      const { data: objs } = await supabase.from('objects').select('*').order('purchase_price', { ascending: false })
+      if (!objs) { setLoading(false); return }
+
+      // Récupérer les documents (factures) pour chaque objet
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('object_id, file_url')
+        .eq('type', 'receipt')
+
+      // Créer un map object_id -> file_url
+      const docMap: Record<string, string> = {}
+      docs?.forEach(d => {
+        if (!docMap[d.object_id]) docMap[d.object_id] = d.file_url
+      })
+
+      // Générer URLs signées pour chaque facture
+      const objectsWithDocs = await Promise.all(objs.map(async (o) => {
+        const fileUrl = docMap[o.id]
+        if (!fileUrl) return { ...o, document_url: undefined }
+
+        try {
+          const urlParts = fileUrl.split('/fixpass-documents/')
+          if (urlParts.length < 2) return { ...o, document_url: fileUrl }
+          const path = decodeURIComponent(urlParts[1].split('?')[0])
+          const { data } = await supabase.storage
+            .from('fixpass-documents')
+            .createSignedUrl(path, 3600)
+          return { ...o, document_url: data?.signedUrl || fileUrl }
+        } catch {
+          return { ...o, document_url: fileUrl }
+        }
+      }))
+
+      setObjects(objectsWithDocs)
+      setSelectedIds(new Set(objectsWithDocs.map(o => o.id)))
       setLoading(false)
     }
     load()
@@ -62,8 +97,8 @@ export default function SinisterPage() {
   const selectedObjects = objects.filter(o => selectedIds.has(o.id))
   const totalAchat = selectedObjects.reduce((s, o) => s + (o.purchase_price || 0), 0)
   const totalRevente = selectedObjects.reduce((s, o) => s + (o.resale_recommended || (o.purchase_price || 0) * 0.6), 0)
-  const withFacture = selectedObjects.filter(o => o.id).length
   const withSerial = selectedObjects.filter(o => o.serial_number).length
+  const withDoc = selectedObjects.filter(o => (o as ObjectWithDoc).document_url).length
 
   const generatePDF = async () => {
     if (selectedObjects.length === 0) { alert('Sélectionnez au moins un objet.'); return }
@@ -84,14 +119,13 @@ export default function SinisterPage() {
       const data = await res.json()
       if (!data.html) { alert('Erreur lors de la génération.'); setGenerating(false); return }
 
-      // Ouvrir dans nouvelle fenêtre pour impression/sauvegarde PDF
       const win = window.open('', '_blank')
       if (win) {
         win.document.write(data.html)
         win.document.close()
-        setTimeout(() => win.print(), 500)
+        setTimeout(() => win.print(), 800)
       }
-    } catch (err) {
+    } catch {
       alert('Erreur lors de la génération.')
     }
     setGenerating(false)
@@ -108,7 +142,6 @@ export default function SinisterPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Header rouge */}
       <header style={{ background: '#A32D2D' }} className="px-4 py-3 flex items-center gap-3">
         <Link href="/dashboard" className="text-red-200 hover:text-white">
           <ArrowLeft size={20} />
@@ -124,24 +157,21 @@ export default function SinisterPage() {
 
       <div className="max-w-lg mx-auto px-4 py-5 pb-24 space-y-5">
 
-        {/* Alerte */}
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
-          <p className="text-sm font-medium text-red-800 mb-1">Dossier d'urgence assurance</p>
+          <p className="text-sm font-medium text-red-800 mb-1">🛡️ Dossier d'urgence assurance</p>
           <p className="text-xs text-red-600 leading-relaxed">
-            Ce dossier sera accepté par votre assureur comme preuve de propriété et d'estimation de valeur. Sélectionnez les objets concernés et générez le PDF en un clic.
+            Le PDF généré contient un <strong>QR code par objet</strong> qui renvoie directement vers la facture originale. L'assureur peut scanner le QR pour vérifier instantanément chaque document.
           </p>
         </div>
 
-        {/* Étape 1 — Type */}
+        {/* Étape 1 */}
         <div>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">1 — Type de sinistre</p>
           <div className="grid grid-cols-2 gap-2">
             {SINISTRE_TYPES.map(t => (
               <button key={t.key} onClick={() => setSinistreType(t.key)}
                 className={`rounded-2xl p-4 text-center border transition-colors ${
-                  sinistreType === t.key
-                    ? 'border-red-400 bg-red-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
+                  sinistreType === t.key ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}>
                 <div className="text-2xl mb-2">{t.emoji}</div>
                 <div className={`text-sm font-medium ${sinistreType === t.key ? 'text-red-700' : 'text-gray-700'}`}>
@@ -152,12 +182,10 @@ export default function SinisterPage() {
           </div>
         </div>
 
-        {/* Étape 2 — Sélection objets */}
+        {/* Étape 2 */}
         <div>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">2 — Objets concernés</p>
-
-          <button onClick={toggleAll}
-            className="w-full flex items-center justify-between py-2 px-1 mb-2">
+          <button onClick={toggleAll} className="w-full flex items-center justify-between py-2 px-1 mb-2">
             <span className="text-sm font-medium text-red-600">
               {selectedIds.size === objects.length ? 'Tout désélectionner' : 'Tout sélectionner'}
             </span>
@@ -169,6 +197,7 @@ export default function SinisterPage() {
           <div className="space-y-2">
             {objects.map(o => {
               const selected = selectedIds.has(o.id)
+              const hasDoc = !!(o as ObjectWithDoc).document_url
               return (
                 <button key={o.id} onClick={() => toggleObject(o.id)}
                   className={`w-full bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 transition-colors ${
@@ -181,6 +210,9 @@ export default function SinisterPage() {
                     <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null].filter(Boolean).join(' · ')}
+                    </p>
+                    <p className={`text-xs mt-0.5 font-medium ${hasDoc ? 'text-teal-600' : 'text-gray-300'}`}>
+                      {hasDoc ? '🧾 Facture + QR code' : '— Pas de facture'}
                     </p>
                   </div>
                   <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
@@ -198,17 +230,18 @@ export default function SinisterPage() {
           </div>
         </div>
 
-        {/* Étape 3 — Récapitulatif */}
+        {/* Étape 3 */}
         {selectedObjects.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">3 — Récapitulatif du dossier</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">3 — Récapitulatif</p>
             <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-2">
               {[
                 { label: 'Objets sélectionnés', value: `${selectedObjects.length} objet${selectedObjects.length > 1 ? 's' : ''}` },
                 { label: 'Valeur d\'achat totale', value: formatPrice(totalAchat), color: 'text-red-600' },
                 { label: 'Valeur de remplacement', value: formatPrice(totalRevente), color: 'text-teal-600' },
                 { label: 'Préjudice déclaré', value: formatPrice(totalAchat), color: 'text-red-700 font-semibold' },
-                { label: 'N° de série disponibles', value: `${withSerial} / ${selectedObjects.length}` },
+                { label: 'QR codes factures', value: `${withDoc} / ${selectedObjects.length}`, color: withDoc === selectedObjects.length ? 'text-teal-600' : 'text-yellow-600' },
+                { label: 'N° de série', value: `${withSerial} / ${selectedObjects.length}` },
               ].map(row => (
                 <div key={row.label} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
                   <span className="text-gray-500">{row.label}</span>
@@ -219,7 +252,6 @@ export default function SinisterPage() {
           </div>
         )}
 
-        {/* Boutons */}
         <div className="space-y-3">
           <button onClick={generatePDF} disabled={generating || selectedObjects.length === 0}
             style={{ background: selectedObjects.length === 0 ? '#ccc' : '#E24B4A' }}
@@ -227,9 +259,8 @@ export default function SinisterPage() {
             <FileText size={20} />
             {generating ? 'Génération en cours...' : '🛡️ Générer le dossier PDF'}
           </button>
-
           <p className="text-xs text-gray-400 text-center">
-            Le PDF s'ouvrira dans un nouvel onglet. Utilisez "Enregistrer en PDF" dans votre navigateur.
+            Le PDF s'ouvre dans un nouvel onglet. Utilisez <strong>Fichier → Enregistrer en PDF</strong> pour le sauvegarder.
           </p>
         </div>
 
