@@ -89,28 +89,38 @@ export default function ObjectDetailPage() {
     setEstimating(false)
   }
 
+  const getSignedUrl = async (fileUrl: string) => {
+    const urlParts = fileUrl.split('/fixpass-documents/')
+    if (urlParts.length < 2) return null
+    const path = decodeURIComponent(urlParts[1].split('?')[0])
+    const { data, error } = await supabase.storage.from('fixpass-documents').createSignedUrl(path, 3600)
+    if (error || !data) return null
+    return data.signedUrl
+  }
+
   const openDocument = async (doc: Document) => {
     if (!doc.file_url) return
-    // Extraire le path depuis l'URL
-    const urlParts = doc.file_url.split('/fixpass-documents/')
-    if (urlParts.length < 2) { window.open(doc.file_url, '_blank'); return }
-    const path = urlParts[1]
-    const { data, error } = await supabase.storage.from('fixpass-documents').createSignedUrl(path, 3600)
-    if (error || !data) { alert('Impossible d\'ouvrir ce fichier.'); return }
-    window.open(data.signedUrl, '_blank')
+    const signedUrl = await getSignedUrl(doc.file_url)
+    if (!signedUrl) { alert('Impossible d\'ouvrir ce fichier.'); return }
+    window.open(signedUrl, '_blank')
   }
 
   const downloadDocument = async (doc: Document) => {
     if (!doc.file_url) return
-    const urlParts = doc.file_url.split('/fixpass-documents/')
-    if (urlParts.length < 2) return
-    const path = urlParts[1]
-    const { data, error } = await supabase.storage.from('fixpass-documents').createSignedUrl(path, 3600)
-    if (error || !data) { alert('Impossible de télécharger ce fichier.'); return }
+    const signedUrl = await getSignedUrl(doc.file_url)
+    if (!signedUrl) { alert('Impossible de télécharger ce fichier.'); return }
+
+    // Téléchargement via blob pour forcer le download
+    const response = await fetch(signedUrl)
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
     const a = window.document.createElement('a')
-    a.href = data.signedUrl
+    a.href = url
     a.download = doc.file_name || 'document'
+    window.document.body.appendChild(a)
     a.click()
+    window.document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
   }
 
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>, type: string = 'receipt') => {
