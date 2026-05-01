@@ -8,6 +8,9 @@ import { CATEGORIES } from '@/lib/types'
 import { computeWarrantyEndDate, computeWarrantyStatus, computeResaleEstimate } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
 export default function NewObjectPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -64,6 +67,27 @@ export default function NewObjectPage() {
     }).select().single()
 
     if (error) { alert('Erreur : ' + error.message); setLoading(false); return }
+
+    // Lancer estimation IA en arrière-plan
+    fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        name: data.name, brand: data.brand, model: data.model,
+        category: data.category, purchase_date: data.purchase_date,
+        purchase_price: data.purchase_price, condition: data.condition,
+        repairs: [],
+      }),
+    }).then(r => r.json()).then(estimate => {
+      if (estimate.resale_recommended) {
+        supabase.from('objects').update({
+          resale_min: estimate.resale_min,
+          resale_max: estimate.resale_max,
+          resale_recommended: estimate.resale_recommended,
+        }).eq('id', data.id)
+      }
+    }).catch(() => {})
+
     router.push(`/objects/${data.id}`)
   }
 
