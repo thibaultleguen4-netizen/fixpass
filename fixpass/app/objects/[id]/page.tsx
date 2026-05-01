@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem, Repair, Document } from '@/lib/types'
 import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw, Download, Eye, Paperclip, X } from 'lucide-react'
+import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw, Download, Eye, Paperclip, X, Upload } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -27,9 +27,9 @@ export default function ObjectDetailPage() {
   const [marketContext, setMarketContext] = useState('')
   const [platforms, setPlatforms] = useState<string[]>([])
 
-  // Formulaire réparation inline
   const [showRepairForm, setShowRepairForm] = useState(false)
   const [repairForm, setRepairForm] = useState({ title: '', description: '', repair_date: '', cost: '', provider: '' })
+  const [repairFile, setRepairFile] = useState<File | null>(null)
   const [savingRepair, setSavingRepair] = useState(false)
 
   useEffect(() => {
@@ -55,25 +55,47 @@ export default function ObjectDetailPage() {
   const handleAddRepair = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingRepair(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setSavingRepair(false); return }
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setSavingRepair(false); return }
 
-    const { data, error } = await supabase.from('repairs').insert({
-      object_id: objectId,
-      user_id: user.id,
-      title: repairForm.title,
-      description: repairForm.description || null,
-      repair_date: repairForm.repair_date || null,
-      cost: repairForm.cost ? parseFloat(repairForm.cost) : null,
-      provider: repairForm.provider || null,
-    }).select().single()
+      const { data, error } = await supabase.from('repairs').insert({
+        object_id: objectId,
+        user_id: user.id,
+        title: repairForm.title,
+        description: repairForm.description || null,
+        repair_date: repairForm.repair_date || null,
+        cost: repairForm.cost ? parseFloat(repairForm.cost) : null,
+        provider: repairForm.provider || null,
+      }).select().single()
 
-    if (error) {
-      alert('Erreur : ' + error.message)
-    } else if (data) {
-      setRepairs(prev => [data, ...prev])
+      if (error) { alert('Erreur : ' + error.message); setSavingRepair(false); return }
+
+      if (data && repairFile) {
+        const ext = repairFile.name.split('.').pop()
+        const timestamp = Date.now()
+        const path = `${user.id}/${objectId}/repair_${timestamp}.${ext}`
+        const { error: uploadError } = await supabase.storage.from('fixpass-documents').upload(path, repairFile, { upsert: true })
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
+          const { data: docData } = await supabase.from('documents').insert({
+            object_id: objectId, user_id: user.id,
+            type: 'other',
+            file_url: publicUrl,
+            file_name: repairFile.name,
+            mime_type: repairFile.type,
+            extraction_status: 'done',
+          }).select().single()
+          if (docData) setDocuments(prev => [docData, ...prev])
+        }
+      }
+
+      if (data) setRepairs(prev => [data, ...prev])
       setRepairForm({ title: '', description: '', repair_date: '', cost: '', provider: '' })
+      setRepairFile(null)
       setShowRepairForm(false)
+    } catch (err) {
+      alert('Erreur inattendue.')
     }
     setSavingRepair(false)
   }
@@ -89,9 +111,7 @@ export default function ObjectDetailPage() {
       })
       const data = await res.json()
       setAnnonce(data.annonce)
-    } catch {
-      setAnnonce('Erreur lors de la génération. Réessayez.')
-    }
+    } catch { setAnnonce('Erreur lors de la génération. Réessayez.') }
     setGeneratingAnnonce(false)
   }
 
@@ -343,7 +363,7 @@ export default function ObjectDetailPage() {
             <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
               <Wrench size={16} /> Historique réparations
             </h3>
-            <button onClick={() => setShowRepairForm(!showRepairForm)}
+            <button onClick={() => { setShowRepairForm(!showRepairForm); setRepairFile(null) }}
               className="text-teal-600 text-xs font-medium flex items-center gap-1 hover:underline">
               {showRepairForm ? <><X size={12} /> Annuler</> : <><Plus size={12} /> Ajouter</>}
             </button>
@@ -373,13 +393,37 @@ export default function ObjectDetailPage() {
                 <label className="label">Description</label>
                 <textarea className="input h-20 resize-none" value={repairForm.description} onChange={e => setRepairForm(f => ({...f, description: e.target.value}))} placeholder="Détails..." />
               </div>
+
+              {/* Upload facture réparation */}
+              <div>
+                <label className="label">Facture de réparation (optionnel)</label>
+                {repairFile ? (
+                  <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2">
+                    <span className="text-lg">🧾</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-teal-800 truncate">{repairFile.name}</p>
+                      <p className="text-xs text-teal-600">{(repairFile.size / 1024).toFixed(0)} Ko</p>
+                    </div>
+                    <button type="button" onClick={() => setRepairFile(null)} className="text-xs text-red-500 hover:text-red-700">Supprimer</button>
+                  </div>
+                ) : (
+                  <label className="block cursor-pointer">
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-teal-400 hover:bg-teal-50 transition-colors">
+                      <Upload size={20} className="mx-auto text-gray-400 mb-1" />
+                      <p className="text-xs text-gray-500">Cliquez pour joindre la facture</p>
+                    </div>
+                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setRepairFile(e.target.files?.[0] || null)} />
+                  </label>
+                )}
+              </div>
+
               <button type="submit" disabled={savingRepair} className="btn-primary w-full py-2 text-sm">
                 {savingRepair ? 'Enregistrement...' : 'Ajouter la réparation'}
               </button>
             </form>
           )}
 
-          {repairs.length === 0 ? (
+          {repairs.length === 0 && !showRepairForm ? (
             <p className="text-sm text-gray-400">Aucune réparation enregistrée.</p>
           ) : (
             <div className="space-y-2">
