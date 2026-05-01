@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
 import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ScanLine, Plus, LogOut, Bell, TrendingUp, X } from 'lucide-react'
+import { ScanLine, Plus, LogOut, TrendingUp, X } from 'lucide-react'
 
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   const sorted = [...objects]
@@ -22,117 +22,159 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
     )
   }
 
-  // Calcul des points
   let cumAchat = 0
   let cumRevente = 0
   const points = sorted.map(o => {
     cumAchat += o.purchase_price || 0
     cumRevente += o.resale_recommended || (o.purchase_price! * 0.6)
-    return {
-      date: new Date(o.purchase_date!),
-      achat: cumAchat,
-      revente: cumRevente,
-      name: o.name,
-    }
+    return { date: new Date(o.purchase_date!), achat: cumAchat, revente: cumRevente }
   })
 
   const maxVal = Math.max(...points.map(p => p.achat))
-  const minVal = 0
-  const range = maxVal - minVal || 1
-  const W = 340
-  const H = 140
+  const W = 340, H = 140
   const PAD = { top: 10, right: 10, bottom: 30, left: 50 }
   const chartW = W - PAD.left - PAD.right
   const chartH = H - PAD.top - PAD.bottom
-
   const xPos = (i: number) => PAD.left + (i / (points.length - 1)) * chartW
-  const yPos = (val: number) => PAD.top + chartH - ((val - minVal) / range) * chartH
-
+  const yPos = (val: number) => PAD.top + chartH - (val / (maxVal || 1)) * chartH
   const achatPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(p.achat)}`).join(' ')
   const reventePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(p.revente)}`).join(' ')
-
-  const achatAreaPath = `${achatPath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
-  const reventeAreaPath = `${reventePath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
-
-  // Labels Y
-  const yLabels = [0, 0.25, 0.5, 0.75, 1].map(t => ({
-    val: minVal + t * range,
-    y: PAD.top + chartH - t * chartH,
-  }))
+  const achatArea = `${achatPath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
+  const reventeArea = `${reventePath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
+  const yLabels = [0, 0.5, 1].map(t => ({ val: t * maxVal, y: PAD.top + chartH - t * chartH }))
 
   return (
     <div>
       <div className="flex items-center gap-4 mb-3">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-0.5 bg-teal-400 rounded"></div>
+          <div className="w-3 h-0.5 rounded" style={{ background: '#1D9E75' }}></div>
           <span className="text-xs text-gray-500">Prix d'achat cumulé</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-0.5 bg-orange-400 rounded" style={{borderStyle:'dashed'}}></div>
+          <div className="w-3 h-0.5 rounded" style={{ background: '#F97316', borderTop: '1px dashed #F97316' }}></div>
           <span className="text-xs text-gray-500">Valeur de revente</span>
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
         <defs>
-          <linearGradient id="achatGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#1D9E75" stopOpacity="0.15" />
             <stop offset="100%" stopColor="#1D9E75" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="reventeGrad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#F97316" stopOpacity="0.1" />
             <stop offset="100%" stopColor="#F97316" stopOpacity="0" />
           </linearGradient>
         </defs>
-
-        {/* Grid lines */}
         {yLabels.map((l, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={l.y} x2={W - PAD.right} y2={l.y}
-              stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4,4" />
-            <text x={PAD.left - 6} y={l.y + 4} textAnchor="end"
-              fontSize="9" fill="#9CA3AF">
+            <line x1={PAD.left} y1={l.y} x2={W - PAD.right} y2={l.y} stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4,4" />
+            <text x={PAD.left - 6} y={l.y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF">
               {l.val >= 1000 ? `${Math.round(l.val / 1000)}k` : Math.round(l.val)}
             </text>
           </g>
         ))}
-
-        {/* Areas */}
-        <path d={achatAreaPath} fill="url(#achatGrad)" />
-        <path d={reventeAreaPath} fill="url(#reventeGrad)" />
-
-        {/* Lines */}
+        <path d={achatArea} fill="url(#ag)" />
+        <path d={reventeArea} fill="url(#rg)" />
         <path d={achatPath} fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <path d={reventePath} fill="none" stroke="#F97316" strokeWidth="1.5" strokeDasharray="5,3" strokeLinecap="round" strokeLinejoin="round" />
-
-        {/* Points */}
         {points.map((p, i) => (
           <g key={i}>
             <circle cx={xPos(i)} cy={yPos(p.achat)} r="3" fill="#1D9E75" />
             <circle cx={xPos(i)} cy={yPos(p.revente)} r="2.5" fill="#F97316" />
           </g>
         ))}
-
-        {/* X labels — affiche 4 dates max */}
-        {points.filter((_, i) => i === 0 || i === points.length - 1 || (points.length > 3 && i === Math.floor(points.length / 2))).map((p, _, arr) => {
-          const origI = points.indexOf(p)
-          return (
-            <text key={origI} x={xPos(origI)} y={H - 4} textAnchor="middle" fontSize="8" fill="#9CA3AF">
-              {p.date.getFullYear()}
-            </text>
-          )
-        })}
+        {[0, points.length - 1].map(i => (
+          <text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="#9CA3AF">
+            {points[i].date.getFullYear()}
+          </text>
+        ))}
       </svg>
-
-      {/* Résumé */}
       <div className="flex justify-between mt-3 pt-3 border-t border-gray-100">
         <div>
           <p className="text-xs text-gray-400">Investi au total</p>
-          <p className="text-sm font-semibold text-teal-700">{formatPrice(points[points.length - 1]?.achat)}</p>
+          <p className="text-sm font-semibold" style={{ color: '#1D9E75' }}>{formatPrice(points[points.length - 1]?.achat)}</p>
         </div>
         <div className="text-right">
           <p className="text-xs text-gray-400">Valeur de revente</p>
-          <p className="text-sm font-semibold text-orange-500">{formatPrice(points[points.length - 1]?.revente)}</p>
+          <p className="text-sm font-semibold" style={{ color: '#F97316' }}>{formatPrice(points[points.length - 1]?.revente)}</p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
+  const withWarranty = objects
+    .filter(o => o.warranty_end_date && o.warranty_status !== 'expired')
+    .map(o => ({ ...o, days: daysUntilExpiry(o.warranty_end_date) }))
+    .filter(o => o.days !== null && o.days > 0)
+    .sort((a, b) => (a.days ?? 999) - (b.days ?? 999))
+    .slice(0, 6)
+
+  const active = objects.filter(o => o.warranty_status === 'active').length
+  const expiring = objects.filter(o => o.warranty_status === 'expiring_soon').length
+  const maxDays = 365
+
+  const getColor = (days: number) => {
+    if (days <= 30) return { bar: '#E24B4A', text: '#E24B4A' }
+    if (days <= 90) return { bar: '#EF9F27', text: '#BA7517' }
+    return { bar: '#1D9E75', text: '#1D9E75' }
+  }
+
+  if (withWarranty.length === 0) return null
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl p-4">
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Garanties</p>
+
+      {/* Résumé */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="bg-gray-50 rounded-xl p-3">
+          <p className="text-2xl font-semibold" style={{ color: '#1D9E75' }}>{active}</p>
+          <p className="text-xs text-gray-400 mt-0.5">Actives</p>
+        </div>
+        <div className="bg-gray-50 rounded-xl p-3">
+          <p className="text-2xl font-semibold" style={{ color: expiring > 0 ? '#BA7517' : '#9CA3AF' }}>{expiring}</p>
+          <p className="text-xs text-gray-400 mt-0.5">Expirent bientôt</p>
+        </div>
+      </div>
+
+      {/* Barres */}
+      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Prochaines expirations</p>
+      <div className="space-y-2.5">
+        {withWarranty.map(o => {
+          const days = o.days ?? 0
+          const colors = getColor(days)
+          const pct = Math.min(100, (days / maxDays) * 100)
+          return (
+            <Link href={`/objects/${o.id}`} key={o.id} className="block">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs text-gray-500 truncate" style={{ width: 110, flexShrink: 0 }}>{o.name}</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: colors.bar }} />
+                </div>
+                <span className="text-xs font-medium w-10 text-right flex-shrink-0" style={{ color: colors.text }}>
+                  {days} j
+                </span>
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* Légende */}
+      <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100">
+        {[
+          { color: '#E24B4A', label: 'Urgent (<30j)' },
+          { color: '#EF9F27', label: 'Bientôt (<90j)' },
+          { color: '#1D9E75', label: 'Active' },
+        ].map(l => (
+          <div key={l.label} className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }}></div>
+            <span className="text-xs text-gray-400">{l.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -154,7 +196,7 @@ export default function DashboardPage() {
       const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'vous'
       setUserName(name)
       setUserInitials(name.slice(0, 2).toUpperCase())
-      const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
+      const { data } = await supabase.from('objects').select('*').order('purchase_date', { ascending: true })
       setObjects(data || [])
       setLoading(false)
     }
@@ -185,7 +227,6 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Header */}
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-teal-400 rounded-lg flex items-center justify-center text-white font-bold text-sm">F</div>
@@ -201,19 +242,15 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-24">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-24">
 
-        {/* Greeting */}
         <div>
           <p className="text-gray-500 text-sm">Bonjour, {userName} 👋</p>
           <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">Votre coffre</h1>
         </div>
 
-        {/* Hero card — patrimoine cliquable */}
-        <div
-          className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none"
-          onClick={() => setShowChart(!showChart)}
-        >
+        {/* Hero patrimoine */}
+        <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
             <p className="text-teal-100 text-xs">Patrimoine estimé</p>
             <div className="flex items-center gap-1 text-teal-100 text-xs">
@@ -243,7 +280,7 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 mb-1.5">Garanties</p>
             <p className="text-2xl font-semibold text-gray-900">{activeWarranties}</p>
             {expiringWarranties.length > 0 && (
-              <p className="text-xs text-yellow-600 mt-1">{expiringWarranties.length} expirent bientôt</p>
+              <p className="text-xs mt-1" style={{ color: '#BA7517' }}>{expiringWarranties.length} expirent bientôt</p>
             )}
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
@@ -254,46 +291,18 @@ export default function DashboardPage() {
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
             <p className="text-xs text-gray-400 mb-1.5">Revente</p>
             <p className="text-2xl font-semibold text-gray-900">{totalResale > 0 ? formatPrice(totalResale) : '—'}</p>
-            {totalResale > 0 && <p className="text-xs text-green-600 mt-1">estimée</p>}
+            {totalResale > 0 && <p className="text-xs mt-1" style={{ color: '#1D9E75' }}>estimée</p>}
           </div>
         </div>
 
         {/* Scan CTA */}
-        <Link href="/scan"
-          className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors">
+        <Link href="/scan" className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors">
           <ScanLine size={20} />
           Scanner une facture
         </Link>
 
-        {/* Alerts garanties */}
-        {expiringWarranties.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Bell size={14} className="text-yellow-600" />
-              <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Alertes garanties</h2>
-            </div>
-            <div className="space-y-2">
-              {expiringWarranties.map(o => {
-                const days = daysUntilExpiry(o.warranty_end_date)
-                return (
-                  <Link href={`/objects/${o.id}`} key={o.id}
-                    className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-2xl px-4 py-3 hover:bg-yellow-100 transition-colors">
-                    <span className="text-xl">{getCategoryEmoji(o.category)}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
-                      <p className="text-xs text-yellow-700 mt-0.5">Expire le {formatDate(o.warranty_end_date)}</p>
-                    </div>
-                    {days !== null && (
-                      <span className="text-xs font-semibold text-yellow-800 bg-yellow-200 px-2.5 py-1 rounded-full flex-shrink-0">
-                        {days} j
-                      </span>
-                    )}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )}
+        {/* Carte garanties avec barres */}
+        <WarrantyCard objects={objects} />
 
         {/* Objects list */}
         <div>
@@ -350,9 +359,7 @@ export default function DashboardPage() {
         ].map(item => (
           <Link key={item.label} href={item.href} className="flex flex-col items-center gap-1">
             <span className="text-xl">{item.icon}</span>
-            <span className={`text-xs ${item.active ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>
-              {item.label}
-            </span>
+            <span className={`text-xs ${item.active ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>{item.label}</span>
           </Link>
         ))}
       </div>
