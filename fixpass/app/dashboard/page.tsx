@@ -295,6 +295,11 @@ export default function DashboardPage() {
           Scanner une facture
         </Link>
 
+        <Link href="/sinistre" className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
+          <span style={{fontSize:16}}>🚨</span>
+          Mode sinistre — Dossier assurance
+        </Link>
+
         <WarrantyCard objects={objects} />
 
         <div>
