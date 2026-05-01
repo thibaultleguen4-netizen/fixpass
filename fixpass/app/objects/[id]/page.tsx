@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { ObjectItem, Repair } from '@/lib/types'
+import { ObjectItem, Repair, Document } from '@/lib/types'
 import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Trash2, Edit, Plus, FileText, Wrench, RefreshCw, Download, Eye, Paperclip } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,6 +18,7 @@ export default function ObjectDetailPage() {
   const supabase = createClient()
   const [obj, setObj] = useState<ObjectItem | null>(null)
   const [repairs, setRepairs] = useState<Repair[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [annonce, setAnnonce] = useState('')
   const [generatingAnnonce, setGeneratingAnnonce] = useState(false)
@@ -30,8 +31,13 @@ export default function ObjectDetailPage() {
       const { data: objData } = await supabase.from('objects').select('*').eq('id', params.id).single()
       if (!objData) { router.push('/dashboard'); return }
       setObj(objData)
+
       const { data: repairData } = await supabase.from('repairs').select('*').eq('object_id', params.id).order('repair_date', { ascending: false })
       setRepairs(repairData || [])
+
+      const { data: docData } = await supabase.from('documents').select('*').eq('object_id', params.id).order('created_at', { ascending: false })
+      setDocuments(docData || [])
+
       setLoading(false)
     }
     load()
@@ -49,10 +55,7 @@ export default function ObjectDetailPage() {
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-annonce`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
         body: JSON.stringify({ object: obj }),
       })
       const data = await res.json()
@@ -65,54 +68,83 @@ export default function ObjectDetailPage() {
 
   const updateResaleEstimate = async () => {
     if (!obj) return
-    console.log('Repairs envoyées:', repairs)
     setEstimating(true)
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      body: JSON.stringify({
-          name: obj.name,
-          brand: obj.brand,
-          model: obj.model,
-          category: obj.category,
-          purchase_date: obj.purchase_date,
-          purchase_price: obj.purchase_price,
-          condition: obj.condition,
-          repairs: repairs.map(r => ({
-            title: r.title,
-            date: r.repair_date,
-            cost: r.cost,
-            description: r.description,
-          })),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          name: obj.name, brand: obj.brand, model: obj.model, category: obj.category,
+          purchase_date: obj.purchase_date, purchase_price: obj.purchase_price, condition: obj.condition,
+          repairs: repairs.map(r => ({ title: r.title, date: r.repair_date, cost: r.cost, description: r.description })),
         }),
       })
       const data = await res.json()
-
       if (data.resale_recommended) {
         await supabase.from('objects').update({
-          resale_min: data.resale_min,
-          resale_max: data.resale_max,
-          resale_recommended: data.resale_recommended,
+          resale_min: data.resale_min, resale_max: data.resale_max, resale_recommended: data.resale_recommended,
         }).eq('id', obj.id)
-
-        setObj(prev => prev ? {
-          ...prev,
-          resale_min: data.resale_min,
-          resale_max: data.resale_max,
-          resale_recommended: data.resale_recommended,
-        } : null)
-
+        setObj(prev => prev ? { ...prev, resale_min: data.resale_min, resale_max: data.resale_max, resale_recommended: data.resale_recommended } : null)
         setMarketContext(data.market_context || '')
         setPlatforms(data.platforms || [])
       }
-    } catch (err) {
-      alert('Erreur lors de l\'estimation.')
-    }
+    } catch { alert('Erreur lors de l\'estimation.') }
     setEstimating(false)
+  }
+
+  const getDocumentIcon = (type: string) => {
+    switch(type) {
+      case 'receipt': return '🧾'
+      case 'photo': return '📷'
+      case 'manual': return '📖'
+      case 'warranty': return '🛡️'
+      default: return '📄'
+    }
+  }
+
+  const getDocumentLabel = (type: string) => {
+    switch(type) {
+      case 'receipt': return 'Facture'
+      case 'photo': return 'Photo'
+      case 'manual': return 'Manuel'
+      case 'warranty': return 'Garantie'
+      default: return 'Document'
+    }
+  }
+
+  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>, type: string = 'receipt') => {
+    const file = e.target.files?.[0]
+    if (!file || !obj) return
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const ext = file.name.split('.').pop()
+    const timestamp = Date.now()
+    const path = `${user.id}/${obj.id}/${type}_${timestamp}.${ext}`
+
+    const { data: uploadData, error } = await supabase.storage.from('fixpass-documents').upload(path, file)
+    if (error) { alert('Erreur upload : ' + error.message); return }
+
+    const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
+
+    const { data: docData } = await supabase.from('documents').insert({
+      object_id: obj.id,
+      user_id: user.id,
+      type,
+      file_url: publicUrl,
+      file_name: file.name,
+      mime_type: file.type,
+      extraction_status: 'done',
+    }).select().single()
+
+    if (docData) setDocuments(prev => [docData, ...prev])
+  }
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm('Supprimer ce document ?')) return
+    await supabase.from('documents').delete().eq('id', docId)
+    setDocuments(prev => prev.filter(d => d.id !== docId))
   }
 
   if (loading || !obj) {
@@ -136,6 +168,7 @@ export default function ObjectDetailPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
 
+        {/* Hero */}
         <div className="card">
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">
@@ -143,9 +176,7 @@ export default function ObjectDetailPage() {
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-gray-900">{obj.name}</h2>
-              <p className="text-gray-500 text-sm mt-0.5">
-                {[obj.brand, obj.model].filter(Boolean).join(' · ')}
-              </p>
+              <p className="text-gray-500 text-sm mt-0.5">{[obj.brand, obj.model].filter(Boolean).join(' · ')}</p>
               <span className={`inline-block mt-2 text-xs px-2.5 py-1 rounded-full font-medium ${WARRANTY_COLORS[obj.warranty_status || 'unknown']}`}>
                 {WARRANTY_LABELS[obj.warranty_status || 'unknown']}
                 {daysLeft !== null && daysLeft > 0 && ` · ${daysLeft} jours restants`}
@@ -154,6 +185,7 @@ export default function ObjectDetailPage() {
           </div>
         </div>
 
+        {/* Achat */}
         <div className="card space-y-2">
           <h3 className="font-semibold text-gray-900 text-sm">Achat</h3>
           {[
@@ -171,6 +203,7 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
+        {/* Garantie */}
         <div className={`card space-y-2 border-l-4 ${
           obj.warranty_status === 'active' ? 'border-l-green-400' :
           obj.warranty_status === 'expiring_soon' ? 'border-l-yellow-400' : 'border-l-red-300'
@@ -189,6 +222,54 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
+        {/* Documents */}
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+              <Paperclip size={16} /> Documents
+            </h3>
+            <label className="text-teal-600 text-xs font-medium flex items-center gap-1 hover:underline cursor-pointer">
+              <Plus size={12} /> Ajouter
+              <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => handleUploadDocument(e, 'receipt')} />
+            </label>
+          </div>
+
+          {documents.length === 0 ? (
+            <p className="text-sm text-gray-400">Aucun document enregistré.</p>
+          ) : (
+            <div className="space-y-2">
+              {documents.map(doc => (
+                <div key={doc.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5">
+                  <span className="text-xl flex-shrink-0">{getDocumentIcon(doc.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{doc.file_name || getDocumentLabel(doc.type)}</p>
+                    <p className="text-xs text-gray-400">{getDocumentLabel(doc.type)} · {formatDate(doc.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {doc.file_url && (
+                      <>
+                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                          className="text-teal-600 hover:text-teal-700">
+                          <Eye size={16} />
+                        </a>
+                        <a href={doc.file_url} download={doc.file_name || 'document'}
+                          className="text-teal-600 hover:text-teal-700">
+                          <Download size={16} />
+                        </a>
+                      </>
+                    )}
+                    <button onClick={() => handleDeleteDocument(doc.id)}
+                      className="text-red-400 hover:text-red-600">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Revente */}
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm">Estimation de revente</h3>
@@ -198,7 +279,6 @@ export default function ObjectDetailPage() {
               {estimating ? 'Analyse...' : 'Actualiser via IA'}
             </button>
           </div>
-
           {obj.resale_recommended ? (
             <>
               <div className="grid grid-cols-3 gap-3">
@@ -208,22 +288,16 @@ export default function ObjectDetailPage() {
                   ['Ambitieux', obj.resale_max, false],
                 ].map(([label, val, highlight]) => (
                   <div key={label as string} className={`rounded-xl p-3 text-center ${highlight ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50'}`}>
-                    <div className={`text-lg font-bold ${highlight ? 'text-teal-700' : 'text-gray-900'}`}>
-                      {formatPrice(val as number)}
-                    </div>
+                    <div className={`text-lg font-bold ${highlight ? 'text-teal-700' : 'text-gray-900'}`}>{formatPrice(val as number)}</div>
                     <div className="text-xs text-gray-500 mt-0.5">{label as string}</div>
                   </div>
                 ))}
               </div>
-              {marketContext && (
-                <p className="text-xs text-gray-500 italic">{marketContext}</p>
-              )}
+              {marketContext && <p className="text-xs text-gray-500 italic">{marketContext}</p>}
               {platforms.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   <span className="text-xs text-gray-400">Vendre sur :</span>
-                  {platforms.map(p => (
-                    <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p}</span>
-                  ))}
+                  {platforms.map(p => <span key={p} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p}</span>)}
                 </div>
               )}
             </>
@@ -234,6 +308,7 @@ export default function ObjectDetailPage() {
           )}
         </div>
 
+        {/* Annonce */}
         <div className="card space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
             <FileText size={16} /> Annonce de revente
@@ -241,8 +316,7 @@ export default function ObjectDetailPage() {
           {annonce ? (
             <div>
               <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-xl p-3 font-sans">{annonce}</pre>
-              <button onClick={() => { navigator.clipboard.writeText(annonce) }}
-                className="btn-secondary w-full mt-2 text-sm">
+              <button onClick={() => navigator.clipboard.writeText(annonce)} className="btn-secondary w-full mt-2 text-sm">
                 Copier l'annonce
               </button>
             </div>
@@ -253,6 +327,7 @@ export default function ObjectDetailPage() {
           )}
         </div>
 
+        {/* Réparations */}
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
