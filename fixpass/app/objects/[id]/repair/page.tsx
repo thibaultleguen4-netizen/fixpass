@@ -9,6 +9,7 @@ import { ArrowLeft, Upload } from 'lucide-react'
 export default function AddRepairPage() {
   const router = useRouter()
   const params = useParams()
+  const objectId = params.id as string
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', repair_date: '', cost: '', provider: '' })
@@ -23,9 +24,8 @@ export default function AddRepairPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
 
-      // 1. Créer la réparation d'abord
       const { data: repairData, error: repairError } = await supabase.from('repairs').insert({
-        object_id: params.id,
+        object_id: objectId,
         user_id: user.id,
         title: form.title,
         description: form.description || null,
@@ -35,29 +35,24 @@ export default function AddRepairPage() {
       }).select().single()
 
       if (repairError) {
-        alert('Erreur lors de la sauvegarde : ' + repairError.message)
+        alert('Erreur : ' + repairError.message)
         setLoading(false)
         return
       }
 
-      // 2. Upload la facture séparément si présente
-      if (repairFile && repairData) {
+      if (repairFile) {
         try {
           const ext = repairFile.name.split('.').pop()
           const timestamp = Date.now()
-          const path = `${user.id}/${params.id}/repair_${timestamp}.${ext}`
-
+          const path = `${user.id}/${objectId}/repair_${timestamp}.${ext}`
           const { error: uploadError } = await supabase.storage
             .from('fixpass-documents')
             .upload(path, repairFile, { upsert: true })
 
           if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('fixpass-documents')
-              .getPublicUrl(path)
-
+            const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
             await supabase.from('documents').insert({
-              object_id: params.id,
+              object_id: objectId,
               user_id: user.id,
               type: 'other',
               file_url: publicUrl,
@@ -65,21 +60,17 @@ export default function AddRepairPage() {
               mime_type: repairFile.type,
               extraction_status: 'done',
             })
-          } else {
-            console.error('Upload error:', uploadError)
-            // On continue quand même — la réparation est sauvegardée
           }
         } catch (uploadErr) {
           console.error('Upload failed:', uploadErr)
-          // On continue — la réparation est sauvegardée sans le fichier
         }
       }
 
-      router.push(`/objects/${params.id}`)
+      router.push(`/objects/${objectId}`)
 
     } catch (err) {
       console.error('Error:', err)
-      alert('Une erreur est survenue. Réessayez.')
+      alert('Une erreur est survenue.')
       setLoading(false)
     }
   }
@@ -87,7 +78,7 @@ export default function AddRepairPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3">
-        <Link href={`/objects/${params.id}`} className="text-gray-400 hover:text-gray-600"><ArrowLeft size={20} /></Link>
+        <Link href={`/objects/${objectId}`} className="text-gray-400 hover:text-gray-600"><ArrowLeft size={20} /></Link>
         <h1 className="font-semibold text-gray-900">Ajouter une réparation</h1>
       </header>
 
@@ -120,7 +111,6 @@ export default function AddRepairPage() {
         <div className="card space-y-3">
           <h3 className="font-semibold text-gray-900 text-sm">Facture de réparation</h3>
           <p className="text-xs text-gray-500">Joignez la facture ou le bon d'intervention (optionnel)</p>
-
           {repairFile ? (
             <div className="flex items-center gap-3 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2.5">
               <span className="text-xl">🧾</span>
@@ -128,8 +118,7 @@ export default function AddRepairPage() {
                 <p className="text-sm font-medium text-teal-800 truncate">{repairFile.name}</p>
                 <p className="text-xs text-teal-600">{(repairFile.size / 1024).toFixed(0)} Ko</p>
               </div>
-              <button type="button" onClick={() => setRepairFile(null)}
-                className="text-xs text-red-500 hover:text-red-700 font-medium">
+              <button type="button" onClick={() => setRepairFile(null)} className="text-xs text-red-500 hover:text-red-700 font-medium">
                 Supprimer
               </button>
             </div>
@@ -140,8 +129,7 @@ export default function AddRepairPage() {
                 <p className="text-sm font-medium text-gray-700">Importer la facture</p>
                 <p className="text-xs text-gray-400 mt-1">Photo JPG, PNG ou PDF</p>
               </div>
-              <input type="file" accept="image/*,.pdf" className="hidden"
-                onChange={e => setRepairFile(e.target.files?.[0] || null)} />
+              <input type="file" accept="image/*,.pdf" className="hidden" onChange={e => setRepairFile(e.target.files?.[0] || null)} />
             </label>
           )}
         </div>
