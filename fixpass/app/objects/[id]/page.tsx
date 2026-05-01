@@ -31,13 +31,10 @@ export default function ObjectDetailPage() {
       const { data: objData } = await supabase.from('objects').select('*').eq('id', params.id).single()
       if (!objData) { router.push('/dashboard'); return }
       setObj(objData)
-
       const { data: repairData } = await supabase.from('repairs').select('*').eq('object_id', params.id).order('repair_date', { ascending: false })
       setRepairs(repairData || [])
-
       const { data: docData } = await supabase.from('documents').select('*').eq('object_id', params.id).order('created_at', { ascending: false })
       setDocuments(docData || [])
-
       setLoading(false)
     }
     load()
@@ -92,52 +89,45 @@ export default function ObjectDetailPage() {
     setEstimating(false)
   }
 
-  const getDocumentIcon = (type: string) => {
-    switch(type) {
-      case 'receipt': return '🧾'
-      case 'photo': return '📷'
-      case 'manual': return '📖'
-      case 'warranty': return '🛡️'
-      default: return '📄'
-    }
+  const openDocument = async (doc: Document) => {
+    if (!doc.file_url) return
+    // Extraire le path depuis l'URL
+    const urlParts = doc.file_url.split('/fixpass-documents/')
+    if (urlParts.length < 2) { window.open(doc.file_url, '_blank'); return }
+    const path = urlParts[1]
+    const { data, error } = await supabase.storage.from('fixpass-documents').createSignedUrl(path, 3600)
+    if (error || !data) { alert('Impossible d\'ouvrir ce fichier.'); return }
+    window.open(data.signedUrl, '_blank')
   }
 
-  const getDocumentLabel = (type: string) => {
-    switch(type) {
-      case 'receipt': return 'Facture'
-      case 'photo': return 'Photo'
-      case 'manual': return 'Manuel'
-      case 'warranty': return 'Garantie'
-      default: return 'Document'
-    }
+  const downloadDocument = async (doc: Document) => {
+    if (!doc.file_url) return
+    const urlParts = doc.file_url.split('/fixpass-documents/')
+    if (urlParts.length < 2) return
+    const path = urlParts[1]
+    const { data, error } = await supabase.storage.from('fixpass-documents').createSignedUrl(path, 3600)
+    if (error || !data) { alert('Impossible de télécharger ce fichier.'); return }
+    const a = window.document.createElement('a')
+    a.href = data.signedUrl
+    a.download = doc.file_name || 'document'
+    a.click()
   }
 
   const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>, type: string = 'receipt') => {
     const file = e.target.files?.[0]
     if (!file || !obj) return
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     const ext = file.name.split('.').pop()
     const timestamp = Date.now()
     const path = `${user.id}/${obj.id}/${type}_${timestamp}.${ext}`
-
-    const { data: uploadData, error } = await supabase.storage.from('fixpass-documents').upload(path, file)
+    const { error } = await supabase.storage.from('fixpass-documents').upload(path, file)
     if (error) { alert('Erreur upload : ' + error.message); return }
-
     const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
-
     const { data: docData } = await supabase.from('documents').insert({
-      object_id: obj.id,
-      user_id: user.id,
-      type,
-      file_url: publicUrl,
-      file_name: file.name,
-      mime_type: file.type,
-      extraction_status: 'done',
+      object_id: obj.id, user_id: user.id, type,
+      file_url: publicUrl, file_name: file.name, mime_type: file.type, extraction_status: 'done',
     }).select().single()
-
     if (docData) setDocuments(prev => [docData, ...prev])
   }
 
@@ -146,6 +136,9 @@ export default function ObjectDetailPage() {
     await supabase.from('documents').delete().eq('id', docId)
     setDocuments(prev => prev.filter(d => d.id !== docId))
   }
+
+  const getDocumentIcon = (type: string) => ({ receipt: '🧾', photo: '📷', manual: '📖', warranty: '🛡️' }[type] || '📄')
+  const getDocumentLabel = (type: string) => ({ receipt: 'Facture', photo: 'Photo', manual: 'Manuel', warranty: 'Garantie' }[type] || 'Document')
 
   if (loading || !obj) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-400">Chargement...</div></div>
@@ -168,7 +161,6 @@ export default function ObjectDetailPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
 
-        {/* Hero */}
         <div className="card">
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0">
@@ -185,7 +177,6 @@ export default function ObjectDetailPage() {
           </div>
         </div>
 
-        {/* Achat */}
         <div className="card space-y-2">
           <h3 className="font-semibold text-gray-900 text-sm">Achat</h3>
           {[
@@ -203,7 +194,6 @@ export default function ObjectDetailPage() {
           ))}
         </div>
 
-        {/* Garantie */}
         <div className={`card space-y-2 border-l-4 ${
           obj.warranty_status === 'active' ? 'border-l-green-400' :
           obj.warranty_status === 'expiring_soon' ? 'border-l-yellow-400' : 'border-l-red-300'
@@ -233,7 +223,6 @@ export default function ObjectDetailPage() {
               <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => handleUploadDocument(e, 'receipt')} />
             </label>
           </div>
-
           {documents.length === 0 ? (
             <p className="text-sm text-gray-400">Aucun document enregistré.</p>
           ) : (
@@ -246,20 +235,13 @@ export default function ObjectDetailPage() {
                     <p className="text-xs text-gray-400">{getDocumentLabel(doc.type)} · {formatDate(doc.created_at)}</p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {doc.file_url && (
-                      <>
-                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                          className="text-teal-600 hover:text-teal-700">
-                          <Eye size={16} />
-                        </a>
-                        <a href={doc.file_url} download={doc.file_name || 'document'}
-                          className="text-teal-600 hover:text-teal-700">
-                          <Download size={16} />
-                        </a>
-                      </>
-                    )}
-                    <button onClick={() => handleDeleteDocument(doc.id)}
-                      className="text-red-400 hover:text-red-600">
+                    <button onClick={() => openDocument(doc)} className="text-teal-600 hover:text-teal-700" title="Voir">
+                      <Eye size={16} />
+                    </button>
+                    <button onClick={() => downloadDocument(doc)} className="text-teal-600 hover:text-teal-700" title="Télécharger">
+                      <Download size={16} />
+                    </button>
+                    <button onClick={() => handleDeleteDocument(doc.id)} className="text-red-400 hover:text-red-600" title="Supprimer">
                       <Trash2 size={14} />
                     </button>
                   </div>
