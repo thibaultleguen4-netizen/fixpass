@@ -30,7 +30,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-teal-400 rounded-2xl flex items-center justify-center text-white font-bold text-xl mx-auto mb-4">F</div>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="mx-auto mb-4">
+  <rect width="48" height="48" rx="14" fill="#1D9E75"/>
+  <path d="M24 8 L36 13 L36 26 C36 33 30.5 38 24 40 C17.5 38 12 33 12 26 L12 13 Z" fill="white" opacity="0.95"/>
+  <text x="24" y="25" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
+</svg>
           <h1 className="text-2xl font-bold text-gray-900">Bon retour !</h1>
           <p className="text-gray-500 mt-1">Connectez-vous à votre coffre</p>
         </div>
