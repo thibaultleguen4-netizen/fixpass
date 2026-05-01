@@ -57,7 +57,6 @@ async function convertPdfToImages(file: File): Promise<string[]> {
 async function extractFromFile(base64Images: string[], mimeType: string, originalFile: File): Promise<ExtractedData> {
   let images = base64Images
 
-  // Si PDF, convertir en images
   if (mimeType === 'application/pdf') {
     images = await convertPdfToImages(originalFile)
   }
@@ -89,7 +88,6 @@ export default function ScanPage() {
   const [extWarningDismissed, setExtWarningDismissed] = useState(false)
   const [pdfLoaded, setPdfLoaded] = useState(false)
 
-  // Charger PDF.js dynamiquement
   const loadPdfJs = () => new Promise<void>((resolve) => {
     if ((window as any).pdfjsLib) { resolve(); return }
     const script = document.createElement('script')
@@ -106,7 +104,6 @@ export default function ScanPage() {
 
     try {
       const isPdf = f.type === 'application/pdf'
-
       if (isPdf) await loadPdfJs()
 
       const reader = new FileReader()
@@ -200,6 +197,26 @@ export default function ScanPage() {
         })
       }
     }
+
+    // Lancer estimation IA en arrière-plan
+    fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({
+        name: objData.name, brand: objData.brand, model: objData.model,
+        category: objData.category, purchase_date: objData.purchase_date,
+        purchase_price: objData.purchase_price, condition: objData.condition,
+        repairs: [],
+      }),
+    }).then(r => r.json()).then(data => {
+      if (data.resale_recommended) {
+        supabase.from('objects').update({
+          resale_min: data.resale_min,
+          resale_max: data.resale_max,
+          resale_recommended: data.resale_recommended,
+        }).eq('id', objData.id)
+      }
+    }).catch(() => {})
 
     router.push(`/objects/${objData.id}`)
   }
@@ -339,6 +356,7 @@ export default function ScanPage() {
           <div className="card text-center py-12">
             <div className="text-4xl mb-4 animate-pulse">💾</div>
             <p className="font-semibold text-gray-900">Sauvegarde en cours...</p>
+            <p className="text-sm text-gray-500 mt-2">Estimation de la valeur de revente...</p>
           </div>
         )}
       </div>
