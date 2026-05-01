@@ -352,10 +352,10 @@ export default function DashboardPage() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around z-10">
-        {[
-          { icon: '🏠', label: 'Accueil', href: '/dashboard', active: true },
-          { icon: '📦', label: 'Objets', href: '/objects', active: false },
-          { icon: '📄', label: 'Scanner', href: '/scan', active: false },
+        {[{ icon: '🏠', label: 'Accueil', href: '/dashboard', active: true },
+{ icon: '📦', label: 'Objets', href: '/objects', active: false },
+{ icon: '📄', label: 'Scanner', href: '/scan', active: false },
+{ icon: '👤', label: 'Profil', href: '/profile', active: false },
         ].map(item => (
           <Link key={item.label} href={item.href} className="flex flex-col items-center gap-1">
             <span className="text-xl">{item.icon}</span>
