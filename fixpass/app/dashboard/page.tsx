@@ -51,7 +51,7 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
           <span className="text-xs text-gray-500">Prix d'achat cumulé</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-0.5 rounded" style={{ background: '#F97316', borderTop: '1px dashed #F97316' }}></div>
+          <div className="w-3 h-0.5 rounded" style={{ background: '#F97316' }}></div>
           <span className="text-xs text-gray-500">Valeur de revente</span>
         </div>
       </div>
@@ -128,7 +128,6 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
     <div className="bg-white border border-gray-100 rounded-2xl p-4">
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Garanties</p>
 
-      {/* Résumé */}
       <div className="grid grid-cols-2 gap-2 mb-4">
         <div className="bg-gray-50 rounded-xl p-3">
           <p className="text-2xl font-semibold" style={{ color: '#1D9E75' }}>{active}</p>
@@ -140,7 +139,6 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
         </div>
       </div>
 
-      {/* Barres */}
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Prochaines expirations</p>
       <div className="space-y-2.5">
         {withWarranty.map(o => {
@@ -163,7 +161,6 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
         })}
       </div>
 
-      {/* Légende */}
       <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100">
         {[
           { color: '#E24B4A', label: 'Urgent (<30j)' },
@@ -249,7 +246,6 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">Votre coffre</h1>
         </div>
 
-        {/* Hero patrimoine */}
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
             <p className="text-teal-100 text-xs">Patrimoine estimé</p>
@@ -274,7 +270,6 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Metrics */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
             <p className="text-xs text-gray-400 mb-1.5">Garanties</p>
@@ -295,16 +290,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Scan CTA */}
         <Link href="/scan" className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors">
           <ScanLine size={20} />
           Scanner une facture
         </Link>
 
-        {/* Carte garanties avec barres */}
         <WarrantyCard objects={objects} />
 
-        {/* Objects list */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -341,16 +333,15 @@ export default function DashboardPage() {
                 </Link>
               ))}
               {objects.length > 10 && (
-                <p className="text-center text-sm text-teal-600 py-2">
+                <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">
                   Voir tous les objets ({objects.length})
-                </p>
+                </Link>
               )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around z-10">
         {[
           { icon: '🏠', label: 'Accueil', href: '/dashboard', active: true },
