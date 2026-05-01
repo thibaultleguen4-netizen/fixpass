@@ -43,11 +43,9 @@ async function extractTextFromPDF(base64: string): Promise<string> {
 async function extractFromFile(base64: string, mimeType: string): Promise<ExtractedData> {
   const isPdf = mimeType === 'application/pdf'
   let textContent = ''
-
   if (isPdf) {
     textContent = await extractTextFromPDF(base64)
   }
-
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
     headers: {
@@ -56,12 +54,10 @@ async function extractFromFile(base64: string, mimeType: string): Promise<Extrac
     },
     body: JSON.stringify({ file: base64, mimeType, textContent }),
   })
-
   if (!res.ok) {
     const err = await res.text()
     throw new Error(`Edge function error: ${err}`)
   }
-
   return res.json()
 }
 
@@ -79,7 +75,6 @@ export default function ScanPage() {
     if (!f) return
     setFile(f)
     setStep('analyzing')
-
     const reader = new FileReader()
     reader.onload = async (ev) => {
       const base64 = (ev.target?.result as string).split(',')[1]
@@ -98,6 +93,7 @@ export default function ScanPage() {
           serial_number: data.serial_number || '',
           warranty_months: data.standard_warranty_months?.toString() || '24',
           extended_warranty_months: data.extended_warranty_months?.toString() || '0',
+          condition: 'good',
         })
         setStep('confirm')
       } catch (err) {
@@ -121,7 +117,7 @@ export default function ScanPage() {
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
     let resale = null
     if (price && form.purchase_date && form.category) {
-      resale = computeResaleEstimate(price, form.purchase_date, form.category, 'good')
+      resale = computeResaleEstimate(price, form.purchase_date, form.category, form.condition || 'good')
     }
 
     const { data: objData, error } = await supabase.from('objects').insert({
@@ -140,7 +136,7 @@ export default function ScanPage() {
       extended_warranty_months: parseInt(form.extended_warranty_months || '0'),
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
-      condition: 'good',
+      condition: form.condition || 'good',
       resale_min: resale?.min || null,
       resale_max: resale?.max || null,
       resale_recommended: resale?.recommended || null,
@@ -279,6 +275,18 @@ export default function ScanPage() {
                   <input className="input" type="number" value={form.extended_warranty_months} onChange={e => set('extended_warranty_months', e.target.value)} />
                 </div>
               </div>
+
+              <div>
+                <label className="label">État de l'objet</label>
+                <select className="input" value={form.condition || 'good'} onChange={e => set('condition', e.target.value)}>
+                  <option value="new">Neuf</option>
+                  <option value="like_new">Comme neuf</option>
+                  <option value="good">Bon état</option>
+                  <option value="fair">État correct</option>
+                  <option value="poor">Mauvais état</option>
+                </select>
+              </div>
+
             </div>
 
             <button onClick={handleSave} className="btn-primary w-full py-3">Créer la fiche objet →</button>
