@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { CATEGORIES } from '@/lib/types'
-import { computeWarrantyEndDate, computeWarrantyStatus, computeResaleEstimate } from '@/lib/utils'
+import { computeWarrantyEndDate, computeWarrantyStatus } from '@/lib/utils'
 import { ArrowLeft, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -135,11 +135,8 @@ export default function ScanPage() {
       : null
 
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
-    let resale = null
-    if (price && form.purchase_date && form.category) {
-      resale = computeResaleEstimate(price, form.purchase_date, form.category, form.condition || 'good')
-    }
 
+    // Pas d'estimation mathématique — on insère null, l'IA s'en charge juste après
     const { data: objData, error } = await supabase.from('objects').insert({
       user_id: user.id,
       name: form.name,
@@ -157,9 +154,9 @@ export default function ScanPage() {
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition || 'good',
-      resale_min: resale?.min || null,
-      resale_max: resale?.max || null,
-      resale_recommended: resale?.recommended || null,
+      resale_min: null,
+      resale_max: null,
+      resale_recommended: null,
     }).select().single()
 
     if (error || !objData) { alert('Erreur : ' + error?.message); setStep('confirm'); return }
@@ -182,7 +179,7 @@ export default function ScanPage() {
       }
     }
 
-    // Attendre l'estimation IA avant de rediriger
+    // Estimation IA — on attend avant de rediriger
     setStep('estimating')
     try {
       const estimateRes = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
@@ -191,8 +188,7 @@ export default function ScanPage() {
         body: JSON.stringify({
           name: objData.name, brand: objData.brand, model: objData.model,
           category: objData.category, purchase_date: objData.purchase_date,
-          purchase_price: objData.purchase_price, condition: objData.condition,
-          repairs: [],
+          condition: objData.condition, repairs: [],
         }),
       })
       const estimateData = await estimateRes.json()
@@ -221,11 +217,11 @@ export default function ScanPage() {
       <div className="max-w-lg mx-auto px-4 py-6">
         {step === 'upload' && (
           <div className="space-y-4">
-    <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
-<div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
-  <span className="text-sm">⚠️</span>
-  <p className="text-xs text-yellow-700">Pour une estimation correcte, assurez-vous que les prix sur votre facture sont en <strong>euros (€)</strong>. Les factures en devise étrangère (USD, TND, GBP...) peuvent donner des estimations incorrectes.</p>
-</div>
+            <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+              <span className="text-sm">⚠️</span>
+              <p className="text-xs text-yellow-700">Pour une estimation correcte, assurez-vous que les prix sur votre facture sont en <strong>euros (€)</strong>. Les factures en devise étrangère (USD, TND, GBP...) peuvent donner des estimations incorrectes.</p>
+            </div>
             <label className="block cursor-pointer">
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover:border-teal-400 hover:bg-teal-50 transition-colors">
                 <Upload size={32} className="mx-auto text-gray-400 mb-3" />
