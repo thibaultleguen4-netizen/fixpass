@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { ArrowLeft, Copy, Check, UserPlus, Crown, Trash2, Home, Users } from 'lucide-react'
+import { ArrowLeft, Copy, Check, UserPlus, Trash2, Home, Users, UserMinus } from 'lucide-react'
 
 export default function HouseholdPage() {
   const router = useRouter()
@@ -26,18 +26,17 @@ export default function HouseholdPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
       setUser(user)
-      await loadHousehold(user.id)
+      await loadHousehold(user)
       setLoading(false)
     }
     load()
   }, [])
 
-  const loadHousehold = async (userId: string) => {
-    // Chercher si l'utilisateur est dans un foyer
+  const loadHousehold = async (currentUser: any) => {
     const { data: memberData } = await supabase
       .from('household_members')
       .select('household_id, role')
-      .eq('user_id', userId)
+      .eq('user_id', currentUser.id)
       .single()
 
     if (!memberData) return
@@ -51,25 +50,35 @@ export default function HouseholdPage() {
     if (!householdData) return
     setHousehold({ ...householdData, myRole: memberData.role })
 
-    // Charger les membres
     const { data: membersData } = await supabase
       .from('household_members')
       .select('user_id, role, joined_at')
       .eq('household_id', householdData.id)
 
-    // Récupérer les profils des membres
+    // Récupérer les vrais noms depuis la table profiles
     const membersWithProfiles = await Promise.all(
       (membersData || []).map(async (m) => {
-        const { data: { user: memberUser } } = await supabase.auth.admin
-          ? { data: { user: null } }
-          : { data: { user: null } }
+        if (m.user_id === currentUser.id) {
+          const meta = currentUser.user_metadata || {}
+          return {
+            ...m,
+            name: meta.full_name || meta.first_name || currentUser.email?.split('@')[0] || 'Moi',
+            email: currentUser.email,
+            isMe: true,
+          }
+        }
+
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', m.user_id)
+          .single()
 
         return {
           ...m,
-          name: m.user_id === userId
-            ? (user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Moi')
-            : `Membre`,
-          isMe: m.user_id === userId,
+          name: profileData?.full_name || profileData?.email?.split('@')[0] || 'Membre',
+          email: profileData?.email || '',
+          isMe: false,
         }
       })
     )
@@ -89,7 +98,6 @@ export default function HouseholdPage() {
 
     if (error) { setErrorMsg('Erreur : ' + error.message); setCreating(false); return }
 
-    // Ajouter le créateur comme owner
     await supabase.from('household_members').insert({
       household_id: data.id,
       user_id: user.id,
@@ -97,7 +105,7 @@ export default function HouseholdPage() {
     })
 
     setSuccessMsg('Foyer créé ! Invitez vos proches avec le code ci-dessous.')
-    await loadHousehold(user.id)
+    await loadHousehold(user)
     setCreating(false)
     setTimeout(() => setSuccessMsg(''), 4000)
   }
@@ -107,7 +115,6 @@ export default function HouseholdPage() {
     setJoining(true)
     setErrorMsg('')
 
-    // Chercher le foyer par code
     const { data: householdData, error } = await supabase
       .from('households')
       .select('*')
@@ -120,23 +127,18 @@ export default function HouseholdPage() {
       return
     }
 
-    // Rejoindre le foyer
     const { error: joinError } = await supabase
       .from('household_members')
       .insert({ household_id: householdData.id, user_id: user.id, role: 'member' })
 
     if (joinError) {
-      if (joinError.code === '23505') {
-        setErrorMsg('Vous êtes déjà membre de ce foyer.')
-      } else {
-        setErrorMsg('Erreur : ' + joinError.message)
-      }
+      setErrorMsg(joinError.code === '23505' ? 'Vous êtes déjà membre de ce foyer.' : 'Erreur : ' + joinError.message)
       setJoining(false)
       return
     }
 
     setSuccessMsg(`Vous avez rejoint le foyer "${householdData.name}" !`)
-    await loadHousehold(user.id)
+    await loadHousehold(user)
     setJoining(false)
     setTimeout(() => setSuccessMsg(''), 4000)
   }
@@ -155,15 +157,30 @@ export default function HouseholdPage() {
     setMembers([])
   }
 
-  const copyInviteLink = () => {
-    const link = `${window.location.origin}/auth/join?code=${household.invite_code}`
-    navigator.clipboard.writeText(link)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const excludeMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`Exclure ${memberName} du foyer ?`)) return
+    const { error } = await supabase
+      .from('household_members')
+      .delete()
+      .eq('household_id', household.id)
+      .eq('user_id', memberId)
+
+    if (error) { alert('Erreur : ' + error.message); return }
+
+    setMembers(prev => prev.filter(m => m.user_id !== memberId))
+    setSuccessMsg(`${memberName} a été exclu du foyer.`)
+    setTimeout(() => setSuccessMsg(''), 3000)
   }
 
   const copyCode = () => {
     navigator.clipboard.writeText(household.invite_code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const copyInviteLink = () => {
+    const link = `${window.location.origin}/auth/join?code=${household.invite_code}`
+    navigator.clipboard.writeText(link)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -187,7 +204,7 @@ export default function HouseholdPage() {
         </h1>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-24">
 
         {successMsg && (
           <div className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 flex items-center gap-2">
@@ -206,7 +223,7 @@ export default function HouseholdPage() {
           <>
             {/* Foyer existant */}
             <div className="bg-teal-400 rounded-2xl p-5">
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-xl">🏠</div>
                 <div>
                   <p className="text-white font-semibold text-lg">{household.name}</p>
@@ -220,20 +237,31 @@ export default function HouseholdPage() {
             {/* Membres */}
             <div className="bg-white border border-gray-100 rounded-2xl p-4">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Users size={13} /> Membres du foyer ({members.length})
+                <Users size={13} /> Membres ({members.length})
               </p>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {members.map((m, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                  <div key={i} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
                     <div className="w-9 h-9 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-sm font-semibold flex-shrink-0">
                       {m.name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{m.name} {m.isMe && '(moi)'}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {m.name} {m.isMe && <span className="text-gray-400 font-normal">(moi)</span>}
+                      </p>
                       <p className="text-xs text-gray-400">
                         {m.role === 'owner' ? '👑 Chef de foyer' : '👤 Membre'}
+                        {m.email && ` · ${m.email}`}
                       </p>
                     </div>
+                    {/* Bouton exclure — seulement pour le chef sur les membres */}
+                    {household.myRole === 'owner' && !m.isMe && m.role !== 'owner' && (
+                      <button onClick={() => excludeMember(m.user_id, m.name)}
+                        className="w-8 h-8 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0"
+                        title={`Exclure ${m.name}`}>
+                        <UserMinus size={15} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -246,7 +274,6 @@ export default function HouseholdPage() {
                   <UserPlus size={13} /> Inviter un membre
                 </p>
                 <p className="text-sm text-gray-500">Partagez ce code ou ce lien avec vos proches :</p>
-
                 <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-gray-400">Code d'invitation</p>
@@ -259,7 +286,6 @@ export default function HouseholdPage() {
                     {copied ? <Check size={16} /> : <Copy size={16} />}
                   </button>
                 </div>
-
                 <button onClick={copyInviteLink}
                   className="w-full btn-secondary text-sm flex items-center justify-center gap-2">
                   {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -268,7 +294,7 @@ export default function HouseholdPage() {
               </div>
             )}
 
-            {/* Quitter */}
+            {/* Quitter / Supprimer */}
             <button onClick={leaveHousehold}
               className="w-full bg-red-50 border border-red-200 text-red-600 rounded-2xl py-3.5 text-sm font-medium flex items-center justify-center gap-2 hover:bg-red-100 transition-colors">
               <Trash2 size={15} />
@@ -277,14 +303,12 @@ export default function HouseholdPage() {
           </>
         ) : (
           <>
-            {/* Pas encore de foyer */}
             <div className="bg-white border border-gray-100 rounded-2xl p-5 text-center">
               <div className="text-4xl mb-3">🏠</div>
               <p className="font-semibold text-gray-900 mb-1">Pas encore de foyer</p>
               <p className="text-sm text-gray-400">Créez un foyer pour regrouper les objets de votre famille, ou rejoignez celui d'un proche.</p>
             </div>
 
-            {/* Créer un foyer */}
             <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Créer un foyer</p>
               <div>
@@ -293,13 +317,11 @@ export default function HouseholdPage() {
                   onChange={e => setHouseholdName(e.target.value)}
                   placeholder="ex: Famille Dupont" />
               </div>
-              <button onClick={createHousehold} disabled={creating}
-                className="btn-primary w-full">
+              <button onClick={createHousehold} disabled={creating} className="btn-primary w-full">
                 {creating ? 'Création...' : '🏠 Créer mon foyer'}
               </button>
             </div>
 
-            {/* Rejoindre un foyer */}
             <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Rejoindre un foyer</p>
               <div>
@@ -309,8 +331,7 @@ export default function HouseholdPage() {
                   onChange={e => setInviteCode(e.target.value)}
                   placeholder="ex: a3f9b2" />
               </div>
-              <button onClick={joinHousehold} disabled={joining}
-                className="btn-secondary w-full">
+              <button onClick={joinHousehold} disabled={joining} className="btn-secondary w-full">
                 {joining ? 'Vérification...' : '🔗 Rejoindre le foyer'}
               </button>
             </div>
