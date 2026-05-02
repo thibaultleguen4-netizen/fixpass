@@ -13,6 +13,24 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    // Supabase envoie le token dans le hash de l'URL
+    // On écoute l'événement PASSWORD_RECOVERY
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setReady(true)
+      }
+    })
+
+    // Vérifier si on a déjà une session active via le hash
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setReady(true)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,6 +73,11 @@ export default function ResetPasswordPage() {
             </div>
             <p className="font-semibold text-gray-900">Mot de passe mis à jour !</p>
             <p className="text-sm text-gray-500">Redirection vers le dashboard...</p>
+          </div>
+        ) : !ready ? (
+          <div className="card text-center py-10">
+            <div className="text-3xl mb-3 animate-pulse">🔒</div>
+            <p className="text-gray-500 text-sm">Vérification du lien en cours...</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="card space-y-4">
