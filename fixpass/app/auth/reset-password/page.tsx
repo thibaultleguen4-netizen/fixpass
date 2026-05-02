@@ -16,27 +16,24 @@ export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    // Lire le token depuis le hash de l'URL (#access_token=...&type=recovery)
     const hash = window.location.hash
-    if (hash && hash.includes('type=recovery')) {
-      const params = new URLSearchParams(hash.substring(1))
-      const accessToken = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
+    const params = new URLSearchParams(hash.substring(1))
+    const type = params.get('type')
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
 
-      if (accessToken && refreshToken) {
-        supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        }).then(({ error }) => {
-          if (error) {
-            setError('Lien invalide ou expiré. Demandez un nouveau lien.')
-          } else {
-            setReady(true)
-          }
-        })
-      }
+    if (type === 'recovery' && accessToken) {
+      supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || '',
+      }).then(({ error }) => {
+        if (error) {
+          setError('Lien invalide ou expiré. Demandez un nouveau lien.')
+        } else {
+          setReady(true)
+        }
+      })
     } else {
-      // Vérifier si on a déjà une session
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
           setReady(true)
