@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
-import { formatPrice, formatDate, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
+import { formatPrice, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
 import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle } from 'lucide-react'
 
@@ -181,8 +181,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [userName, setUserName] = useState('')
   const [userInitials, setUserInitials] = useState('')
+  const [userId, setUserId] = useState('')
   const [showChart, setShowChart] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({})
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -192,14 +194,52 @@ export default function DashboardPage() {
       const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'vous'
       setUserName(name)
       setUserInitials(name.slice(0, 2).toUpperCase())
-      const { data } = await supabase.from('objects').select('*').order('purchase_date', { ascending: true })
+      setUserId(user.id)
+
+      const { data } = await supabase
+        .from('objects')
+        .select('*')
+        .order('created_at', { ascending: false })
       setObjects(data || [])
+
+      // Charger les noms des membres du foyer
+      const { data: householdData } = await supabase
+        .from('households')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single()
+
+      if (householdData) {
+        const { data: members } = await supabase
+          .from('household_members')
+          .select('user_id')
+          .eq('household_id', householdData.id)
+          .neq('user_id', user.id)
+
+        if (members && members.length > 0) {
+          // Récupérer les profils via auth
+          const names: Record<string, string> = {}
+          for (const m of members) {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', m.user_id)
+              .single()
+            if (profileData) {
+              names[m.user_id] = profileData.full_name || profileData.email || 'Membre'
+            } else {
+              names[m.user_id] = 'Membre du foyer'
+            }
+          }
+          setMemberNames(names)
+        }
+      }
+
       setLoading(false)
     }
     load()
   }, [])
 
-  // Fermer le menu si clic en dehors
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -244,13 +284,11 @@ export default function DashboardPage() {
           <span className="font-semibold text-gray-900">FixPass</span>
         </div>
 
-        {/* Avatar avec menu déroulant */}
         <div className="relative" ref={menuRef}>
           <button onClick={() => setShowMenu(!showMenu)}
             className="w-8 h-8 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors">
             {userInitials}
           </button>
-
           {showMenu && (
             <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-lg z-50 overflow-hidden w-52">
               <div className="px-4 py-3 border-b border-gray-100">
@@ -281,7 +319,9 @@ export default function DashboardPage() {
 
         <div>
           <p className="text-gray-500 text-sm">Bonjour, {userName} 👋</p>
-          <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">Votre coffre</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">
+            {Object.keys(memberNames).length > 0 ? 'Coffre du foyer' : 'Votre coffre'}
+          </h1>
         </div>
 
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
@@ -294,7 +334,6 @@ export default function DashboardPage() {
           </div>
           <p className="text-white text-4xl font-semibold">{formatPrice(totalValue)}</p>
           <p className="text-teal-100 text-xs mt-1.5">{objects.length} objet{objects.length > 1 ? 's' : ''} enregistré{objects.length > 1 ? 's' : ''}</p>
-
           {showChart && (
             <div className="mt-4 bg-white rounded-xl p-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-2">
@@ -343,7 +382,7 @@ export default function DashboardPage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Mes objets {objects.length > 0 && `(${objects.length})`}
+              {Object.keys(memberNames).length > 0 ? 'Objets du foyer' : 'Mes objets'} {objects.length > 0 && `(${objects.length})`}
             </h2>
             <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline">
               <Plus size={14} /> Ajouter
@@ -358,23 +397,32 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {objects.slice(0, 10).map(o => (
-                <Link href={`/objects/${o.id}`} key={o.id}
-                  className="bg-white border border-gray-100 rounded-2xl flex items-center gap-3 px-4 py-3.5 hover:border-gray-200 transition-colors">
-                  <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-                    {getCategoryEmoji(o.category)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}
-                    </p>
-                  </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${WARRANTY_COLORS[o.warranty_status || 'unknown']}`}>
-                    {WARRANTY_LABELS[o.warranty_status || 'unknown']}
-                  </span>
-                </Link>
-              ))}
+              {objects.slice(0, 10).map(o => {
+                const isOther = o.user_id !== userId
+                const memberName = memberNames[o.user_id]
+                return (
+                  <Link href={`/objects/${o.id}`} key={o.id}
+                    className={`bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 hover:border-gray-200 transition-colors ${isOther ? 'border-teal-100' : 'border-gray-100'}`}>
+                    <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+                      {getCategoryEmoji(o.category)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}
+                      </p>
+                      {isOther && memberName && (
+                        <p className="text-xs text-teal-600 font-medium mt-0.5">
+                          👤 {memberName}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${WARRANTY_COLORS[o.warranty_status || 'unknown']}`}>
+                      {WARRANTY_LABELS[o.warranty_status || 'unknown']}
+                    </span>
+                  </Link>
+                )
+              })}
               {objects.length > 10 && (
                 <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">
                   Voir tous les objets ({objects.length})
