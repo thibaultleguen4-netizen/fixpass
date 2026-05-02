@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { CATEGORIES } from '@/lib/types'
-import { computeWarrantyEndDate, computeWarrantyStatus, computeResaleEstimate } from '@/lib/utils'
+import { computeWarrantyEndDate, computeWarrantyStatus } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -15,6 +15,7 @@ export default function NewObjectPage() {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [estimating, setEstimating] = useState(false)
   const [form, setForm] = useState({
     name: '', brand: '', model: '', category: '', serial_number: '',
     purchase_date: '', purchase_price: '', currency: 'EUR',
@@ -35,14 +36,9 @@ export default function NewObjectPage() {
       ? computeWarrantyEndDate(form.purchase_date, parseInt(form.warranty_months), parseInt(form.extended_warranty_months))
       : null
 
-    const warrantyStatus = warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown'
-
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
-    let resale = null
-    if (price && form.purchase_date && form.category) {
-      resale = computeResaleEstimate(price, form.purchase_date, form.category, form.condition)
-    }
 
+    // Pas d'estimation mathématique — l'IA s'en charge juste après
     const { data, error } = await supabase.from('objects').insert({
       user_id: user.id,
       name: form.name,
@@ -58,35 +54,38 @@ export default function NewObjectPage() {
       warranty_months: parseInt(form.warranty_months),
       extended_warranty_months: parseInt(form.extended_warranty_months),
       warranty_end_date: warrantyEnd,
-      warranty_status: warrantyStatus,
+      warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition,
-      resale_min: resale?.min || null,
-      resale_max: resale?.max || null,
-      resale_recommended: resale?.recommended || null,
+      resale_min: null,
+      resale_max: null,
+      resale_recommended: null,
       notes: form.notes || null,
     }).select().single()
 
     if (error) { alert('Erreur : ' + error.message); setLoading(false); return }
 
-    // Lancer estimation IA en arrière-plan
-    fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({
-        name: data.name, brand: data.brand, model: data.model,
-        category: data.category, purchase_date: data.purchase_date,
-        purchase_price: data.purchase_price, condition: data.condition,
-        repairs: [],
-      }),
-    }).then(r => r.json()).then(estimate => {
+    // Attendre l'estimation IA avant de rediriger
+    setLoading(false)
+    setEstimating(true)
+    try {
+      const estimateRes = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          name: data.name, brand: data.brand, model: data.model,
+          category: data.category, purchase_date: data.purchase_date,
+          condition: data.condition, repairs: [],
+        }),
+      })
+      const estimate = await estimateRes.json()
       if (estimate.resale_recommended) {
-        supabase.from('objects').update({
+        await supabase.from('objects').update({
           resale_min: estimate.resale_min,
           resale_max: estimate.resale_max,
           resale_recommended: estimate.resale_recommended,
         }).eq('id', data.id)
       }
-    }).catch(() => {})
+    } catch {}
 
     router.push(`/objects/${data.id}`)
   }
@@ -98,94 +97,104 @@ export default function NewObjectPage() {
         <h1 className="font-semibold text-gray-900">Ajouter un objet</h1>
       </header>
 
-      <form onSubmit={handleSubmit} className="max-w-lg mx-auto px-4 py-6 space-y-5">
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">Informations générales</h2>
-          <div>
-            <label className="label">Nom de l'objet *</label>
-            <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="ex: iPhone 14" required />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Marque</label>
-              <input className="input" value={form.brand} onChange={e => set('brand', e.target.value)} placeholder="Apple" />
-            </div>
-            <div>
-              <label className="label">Modèle</label>
-              <input className="input" value={form.model} onChange={e => set('model', e.target.value)} placeholder="A2882" />
-            </div>
-          </div>
-          <div>
-            <label className="label">Catégorie</label>
-            <select className="input" value={form.category} onChange={e => set('category', e.target.value)}>
-              <option value="">Choisir...</option>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Numéro de série</label>
-            <input className="input" value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="SN123456" />
+      {estimating ? (
+        <div className="max-w-lg mx-auto px-4 py-6">
+          <div className="card text-center py-12">
+            <div className="text-4xl mb-4 animate-pulse">💶</div>
+            <p className="font-semibold text-gray-900">Estimation de la valeur de revente...</p>
+            <p className="text-sm text-gray-500 mt-2">L'IA analyse le marché français, patientez...</p>
           </div>
         </div>
-
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">Achat</h2>
-          <div className="grid grid-cols-2 gap-3">
+      ) : (
+        <form onSubmit={handleSubmit} className="max-w-lg mx-auto px-4 py-6 space-y-5">
+          <div className="card space-y-4">
+            <h2 className="font-semibold text-gray-900">Informations générales</h2>
             <div>
-              <label className="label">Date d'achat</label>
-              <input className="input" type="date" value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} />
+              <label className="label">Nom de l'objet *</label>
+              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="ex: iPhone 14" required />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Marque</label>
+                <input className="input" value={form.brand} onChange={e => set('brand', e.target.value)} placeholder="Apple" />
+              </div>
+              <div>
+                <label className="label">Modèle</label>
+                <input className="input" value={form.model} onChange={e => set('model', e.target.value)} placeholder="A2882" />
+              </div>
             </div>
             <div>
-              <label className="label">Prix d'achat (€)</label>
-              <input className="input" type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="899" />
-            </div>
-          </div>
-          <div>
-            <label className="label">Vendeur</label>
-            <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Amazon..." />
-          </div>
-          <div>
-            <label className="label">N° de commande</label>
-            <input className="input" value={form.order_number} onChange={e => set('order_number', e.target.value)} placeholder="FNAC-928381" />
-          </div>
-        </div>
-
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">Garantie</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Garantie standard (mois)</label>
-              <input className="input" type="number" value={form.warranty_months} onChange={e => set('warranty_months', e.target.value)} />
+              <label className="label">Catégorie</label>
+              <select className="input" value={form.category} onChange={e => set('category', e.target.value)}>
+                <option value="">Choisir...</option>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div>
-              <label className="label">Extension (mois)</label>
-              <input className="input" type="number" value={form.extended_warranty_months} onChange={e => set('extended_warranty_months', e.target.value)} />
+              <label className="label">Numéro de série</label>
+              <input className="input" value={form.serial_number} onChange={e => set('serial_number', e.target.value)} placeholder="SN123456" />
             </div>
           </div>
-        </div>
 
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-gray-900">État</h2>
-          <div>
-            <label className="label">État actuel</label>
-            <select className="input" value={form.condition} onChange={e => set('condition', e.target.value)}>
-              <option value="new">Neuf</option>
-              <option value="like_new">Comme neuf</option>
-              <option value="good">Bon état</option>
-              <option value="fair">État correct</option>
-              <option value="poor">Mauvais état</option>
-            </select>
+          <div className="card space-y-4">
+            <h2 className="font-semibold text-gray-900">Achat</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Date d'achat</label>
+                <input className="input" type="date" value={form.purchase_date} onChange={e => set('purchase_date', e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Prix d'achat (€)</label>
+                <input className="input" type="number" value={form.purchase_price} onChange={e => set('purchase_price', e.target.value)} placeholder="899" />
+              </div>
+            </div>
+            <div>
+              <label className="label">Vendeur</label>
+              <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Amazon..." />
+            </div>
+            <div>
+              <label className="label">N° de commande</label>
+              <input className="input" value={form.order_number} onChange={e => set('order_number', e.target.value)} placeholder="FNAC-928381" />
+            </div>
           </div>
-          <div>
-            <label className="label">Notes</label>
-            <textarea className="input h-20 resize-none" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observations, accessoires inclus..." />
-          </div>
-        </div>
 
-        <button type="submit" disabled={loading} className="btn-primary w-full py-3">
-          {loading ? 'Enregistrement...' : 'Créer la fiche objet'}
-        </button>
-      </form>
+          <div className="card space-y-4">
+            <h2 className="font-semibold text-gray-900">Garantie</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">Garantie standard (mois)</label>
+                <input className="input" type="number" value={form.warranty_months} onChange={e => set('warranty_months', e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Extension (mois)</label>
+                <input className="input" type="number" value={form.extended_warranty_months} onChange={e => set('extended_warranty_months', e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card space-y-4">
+            <h2 className="font-semibold text-gray-900">État</h2>
+            <div>
+              <label className="label">État actuel</label>
+              <select className="input" value={form.condition} onChange={e => set('condition', e.target.value)}>
+                <option value="new">Neuf</option>
+                <option value="like_new">Comme neuf</option>
+                <option value="good">Bon état</option>
+                <option value="fair">État correct</option>
+                <option value="poor">Mauvais état</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Notes</label>
+              <textarea className="input h-20 resize-none" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observations, accessoires inclus..." />
+            </div>
+          </div>
+
+          <button type="submit" disabled={loading} className="btn-primary w-full py-3">
+            {loading ? 'Enregistrement...' : 'Créer la fiche objet'}
+          </button>
+        </form>
+      )}
     </div>
   )
 }
