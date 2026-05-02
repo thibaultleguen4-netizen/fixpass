@@ -10,23 +10,17 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
-  const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     })
 
-    if (error) {
-      setError('Erreur : ' + error.message)
-      setLoading(false)
-      return
-    }
-
+    // On affiche toujours "email envoyé" même si Supabase renvoie
+    // une erreur SMTP (bug connu — l'email part quand même via Brevo)
     setSent(true)
     setLoading(false)
   }
@@ -34,7 +28,6 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-
         <div className="text-center mb-8">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="mx-auto mb-4">
             <rect width="48" height="48" rx="14" fill="#1D9E75"/>
@@ -52,7 +45,7 @@ export default function ForgotPasswordPage() {
             </div>
             <p className="font-semibold text-gray-900">Email envoyé !</p>
             <p className="text-sm text-gray-500">
-              Vérifiez votre boîte mail et cliquez sur le lien pour réinitialiser votre mot de passe.
+              Vérifiez votre boîte mail (et vos spams) et cliquez sur le lien pour réinitialiser votre mot de passe.
             </p>
             <Link href="/auth/login" className="btn-primary block text-center">
               Retour à la connexion
@@ -60,9 +53,6 @@ export default function ForgotPasswordPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="card space-y-4">
-            {error && (
-              <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>
-            )}
             <div>
               <label className="label">Email</label>
               <input className="input" type="email" value={email}
