@@ -65,31 +65,24 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       if (field === 'email') {
-        // Mise à jour email via Supabase Auth
         const { error } = await supabase.auth.updateUser({ email: editValue })
         if (error) { alert('Erreur : ' + error.message); setSaving(false); return }
         setProfile(p => ({ ...p, email: editValue }))
         setSuccessMsg('Email mis à jour — vérifiez votre boîte mail pour confirmer.')
       } else {
-        // Mise à jour métadonnées
         const newMeta: any = { ...user.user_metadata }
         newMeta[field] = editValue
-
-        // Recalcule full_name si prénom ou nom changé
         const firstName = field === 'first_name' ? editValue : profile.first_name
         const lastName = field === 'last_name' ? editValue : profile.last_name
         newMeta.first_name = firstName
         newMeta.last_name = lastName
         newMeta.full_name = `${firstName} ${lastName}`.trim()
-
         const { data, error } = await supabase.auth.updateUser({ data: newMeta })
         if (error) { alert('Erreur : ' + error.message); setSaving(false); return }
-
         setUser(data.user)
         setProfile(p => ({ ...p, [field]: editValue }))
         setSuccessMsg('Informations mises à jour !')
       }
-
       setEditing(null)
       setEditValue('')
       setTimeout(() => setSuccessMsg(''), 3000)
@@ -150,7 +143,6 @@ export default function ProfilePage() {
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-24">
 
-        {/* Message succès */}
         {successMsg && (
           <div className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 flex items-center gap-2">
             <Check size={16} className="text-green-600" />
@@ -240,6 +232,14 @@ export default function ProfilePage() {
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Paramètres</p>
           <div className="space-y-0">
+            <Link href="/household"
+              className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🏠</span>
+                <span className="text-sm text-gray-900">Mon foyer</span>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </Link>
             <Link href="/auth/reset-password"
               className="flex items-center justify-between py-3 border-b border-gray-50">
               <div className="flex items-center gap-3">
