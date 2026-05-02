@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
 import { formatPrice, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS, CATEGORIES } from '@/lib/types'
-import { Plus, Search, SlidersHorizontal, LogOut } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, LogOut, Trash2, CheckSquare, Square, X } from 'lucide-react'
 
 interface ObjectWithDocs extends ObjectItem {
   docCount?: number
@@ -24,36 +24,80 @@ export default function ObjectsPage() {
   const [sortBy, setSortBy] = useState<'date' | 'price' | 'warranty'>('date')
   const [showSort, setShowSort] = useState(false)
 
+  // Mode sélection
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
-
-      const { data: objs } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
-      if (!objs) { setLoading(false); return }
-
-      // Compte des documents et réparations par objet
-      const { data: docs } = await supabase.from('documents').select('object_id')
-      const { data: repairs } = await supabase.from('repairs').select('object_id')
-
-      const docCounts: Record<string, number> = {}
-      const repairCounts: Record<string, number> = {}
-      docs?.forEach(d => { docCounts[d.object_id] = (docCounts[d.object_id] || 0) + 1 })
-      repairs?.forEach(r => { repairCounts[r.object_id] = (repairCounts[r.object_id] || 0) + 1 })
-
-      setObjects(objs.map(o => ({
-        ...o,
-        docCount: docCounts[o.id] || 0,
-        repairCount: repairCounts[o.id] || 0,
-      })))
-      setLoading(false)
-    }
     load()
   }, [])
+
+  const load = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/auth/login'); return }
+
+    const { data: objs } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
+    if (!objs) { setLoading(false); return }
+
+    const { data: docs } = await supabase.from('documents').select('object_id')
+    const { data: repairs } = await supabase.from('repairs').select('object_id')
+
+    const docCounts: Record<string, number> = {}
+    const repairCounts: Record<string, number> = {}
+    docs?.forEach(d => { docCounts[d.object_id] = (docCounts[d.object_id] || 0) + 1 })
+    repairs?.forEach(r => { repairCounts[r.object_id] = (repairCounts[r.object_id] || 0) + 1 })
+
+    setObjects(objs.map(o => ({
+      ...o,
+      docCount: docCounts[o.id] || 0,
+      repairCount: repairCounts[o.id] || 0,
+    })))
+    setLoading(false)
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/')
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(o => o.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Supprimer ${selectedIds.size} objet${selectedIds.size > 1 ? 's' : ''} définitivement ?`)) return
+
+    setDeleting(true)
+    const ids = Array.from(selectedIds)
+
+    // Supprimer documents et réparations associés
+    await supabase.from('documents').delete().in('object_id', ids)
+    await supabase.from('repairs').delete().in('object_id', ids)
+    await supabase.from('objects').delete().in('id', ids)
+
+    setObjects(prev => prev.filter(o => !selectedIds.has(o.id)))
+    setSelectedIds(new Set())
+    setSelectMode(false)
+    setDeleting(false)
+  }
+
+  const cancelSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
   }
 
   // Filtrage
@@ -76,7 +120,6 @@ export default function ObjectsPage() {
   const expiringSoon = filtered.filter(o => o.warranty_status === 'expiring_soon' || (daysUntilExpiry(o.warranty_end_date) ?? 999) <= 30)
   const rest = filtered.filter(o => !expiringSoon.includes(o))
 
-  // Catégories présentes
   const usedCategories = ['Tous', ...CATEGORIES.filter(c => objects.some(o => o.category === c))]
   const categoryCounts: Record<string, number> = { Tous: objects.length }
   CATEGORIES.forEach(c => { categoryCounts[c] = objects.filter(o => o.category === c).length })
@@ -95,25 +138,54 @@ export default function ObjectsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2.5">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#1D9E75"/>
-  <path d="M16 5 L24 8.5 L24 17 C24 22 20.5 25.5 16 27 C11.5 25.5 8 22 8 17 L8 8.5 Z" fill="white" opacity="0.95"/>
-  <text x="16" y="17" textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
-</svg>
-          <span className="font-semibold text-gray-900">Mes objets</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline">
-            <Plus size={15} /> Ajouter
-          </Link>
-          <button onClick={handleLogout} className="text-gray-400 hover:text-gray-600 p-1 ml-1">
-            <LogOut size={17} />
-          </button>
-        </div>
-      </header>
+      {/* Header normal */}
+      {!selectMode ? (
+        <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-2.5">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <rect width="32" height="32" rx="8" fill="#1D9E75"/>
+              <path d="M16 5 L24 8.5 L24 17 C24 22 20.5 25.5 16 27 C11.5 25.5 8 22 8 17 L8 8.5 Z" fill="white" opacity="0.95"/>
+              <text x="16" y="17" textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
+            </svg>
+            <span className="font-semibold text-gray-900">Mes objets</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSelectMode(true)}
+              className="text-gray-400 hover:text-red-500 transition-colors"
+              title="Sélection multiple">
+              <Trash2 size={17} />
+            </button>
+            <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline">
+              <Plus size={15} /> Ajouter
+            </Link>
+          </div>
+        </header>
+      ) : (
+        /* Header mode sélection */
+        <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <button onClick={cancelSelectMode} className="text-gray-400 hover:text-gray-600">
+              <X size={20} />
+            </button>
+            <span className="font-semibold text-gray-900">
+              {selectedIds.size > 0 ? `${selectedIds.size} sélectionné${selectedIds.size > 1 ? 's' : ''}` : 'Sélectionner'}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={toggleSelectAll}
+              className="text-sm text-teal-600 font-medium hover:underline">
+              {selectedIds.size === filtered.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </button>
+            {selectedIds.size > 0 && (
+              <button onClick={handleBulkDelete} disabled={deleting}
+                className="flex items-center gap-1.5 bg-red-500 text-white text-sm font-medium px-3 py-1.5 rounded-xl hover:bg-red-600 transition-colors">
+                <Trash2 size={14} />
+                {deleting ? 'Suppression...' : 'Supprimer'}
+              </button>
+            )}
+          </div>
+        </header>
+      )}
 
       <div className="max-w-lg mx-auto px-4 py-4 pb-24 space-y-3">
 
@@ -175,24 +247,31 @@ export default function ObjectsPage() {
           </div>
         ) : (
           <>
-            {/* Expirent bientôt */}
             {expiringSoon.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">⚠️ Garantie expire bientôt</p>
                 <div className="space-y-2">
-                  {expiringSoon.map(o => <ObjectCard key={o.id} o={o} />)}
+                  {expiringSoon.map(o => (
+                    <ObjectCard key={o.id} o={o}
+                      selectMode={selectMode}
+                      selected={selectedIds.has(o.id)}
+                      onToggle={() => toggleSelect(o.id)} />
+                  ))}
                 </div>
               </div>
             )}
-
-            {/* Tous les autres */}
             {rest.length > 0 && (
               <div>
                 {expiringSoon.length > 0 && (
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 mt-2">Tous les objets</p>
                 )}
                 <div className="space-y-2">
-                  {rest.map(o => <ObjectCard key={o.id} o={o} />)}
+                  {rest.map(o => (
+                    <ObjectCard key={o.id} o={o}
+                      selectMode={selectMode}
+                      selected={selectedIds.has(o.id)}
+                      onToggle={() => toggleSelect(o.id)} />
+                  ))}
                 </div>
               </div>
             )}
@@ -206,6 +285,7 @@ export default function ObjectsPage() {
           { icon: '🏠', label: 'Accueil', href: '/dashboard', active: false },
           { icon: '📦', label: 'Objets', href: '/objects', active: true },
           { icon: '📄', label: 'Scanner', href: '/scan', active: false },
+          { icon: '👤', label: 'Profil', href: '/profile', active: false },
         ].map(item => (
           <Link key={item.label} href={item.href} className="flex flex-col items-center gap-1">
             <span style={{ fontSize: 20 }}>{item.icon}</span>
@@ -217,8 +297,41 @@ export default function ObjectsPage() {
   )
 }
 
-function ObjectCard({ o }: { o: ObjectWithDocs }) {
+function ObjectCard({ o, selectMode, selected, onToggle }: {
+  o: ObjectWithDocs
+  selectMode: boolean
+  selected: boolean
+  onToggle: () => void
+}) {
   const days = daysUntilExpiry(o.warranty_end_date)
+
+  if (selectMode) {
+    return (
+      <button onClick={onToggle}
+        className={`w-full bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 transition-colors ${
+          selected ? 'border-red-400 bg-red-50' : 'border-gray-100 hover:border-gray-200'
+        }`}>
+        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
+          selected ? 'border-red-500 bg-red-500' : 'border-gray-300'
+        }`}>
+          {selected && (
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 4L4 7L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+        <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+          {getCategoryEmoji(o.category)}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+      </button>
+    )
+  }
 
   return (
     <Link href={`/objects/${o.id}`}
@@ -231,7 +344,6 @@ function ObjectCard({ o }: { o: ObjectWithDocs }) {
         <p className="text-xs text-gray-400 mt-0.5">
           {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}
         </p>
-        {/* Documents et réparations */}
         <div className="flex items-center gap-3 mt-1">
           {(o.docCount || 0) > 0 && (
             <span className="text-xs text-teal-600 font-medium">
