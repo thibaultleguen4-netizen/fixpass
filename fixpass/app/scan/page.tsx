@@ -221,7 +221,11 @@ export default function ScanPage() {
       <div className="max-w-lg mx-auto px-4 py-6">
         {step === 'upload' && (
           <div className="space-y-4">
-            <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
+    <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
+<div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+  <span className="text-sm">⚠️</span>
+  <p className="text-xs text-yellow-700">Pour une estimation correcte, assurez-vous que les prix sur votre facture sont en <strong>euros (€)</strong>. Les factures en devise étrangère (USD, TND, GBP...) peuvent donner des estimations incorrectes.</p>
+</div>
             <label className="block cursor-pointer">
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover:border-teal-400 hover:bg-teal-50 transition-colors">
                 <Upload size={32} className="mx-auto text-gray-400 mb-3" />
