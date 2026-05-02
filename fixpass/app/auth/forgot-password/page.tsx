@@ -17,6 +17,7 @@ export default function ForgotPasswordPage() {
 
     await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
+      captchaToken: undefined,
     })
 
     // On affiche toujours "email envoyé" même si Supabase renvoie
