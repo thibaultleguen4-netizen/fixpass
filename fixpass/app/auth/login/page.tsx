@@ -31,10 +31,10 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="mx-auto mb-4">
-  <rect width="48" height="48" rx="14" fill="#1D9E75"/>
-  <path d="M24 8 L36 13 L36 26 C36 33 30.5 38 24 40 C17.5 38 12 33 12 26 L12 13 Z" fill="white" opacity="0.95"/>
-  <text x="24" y="25" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
-</svg>
+            <rect width="48" height="48" rx="14" fill="#1D9E75"/>
+            <path d="M24 8 L36 13 L36 26 C36 33 30.5 38 24 40 C17.5 38 12 33 12 26 L12 13 Z" fill="white" opacity="0.95"/>
+            <text x="24" y="25" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
+          </svg>
           <h1 className="text-2xl font-bold text-gray-900">Bon retour !</h1>
           <p className="text-gray-500 mt-1">Connectez-vous à votre coffre</p>
         </div>
@@ -45,11 +45,20 @@ export default function LoginPage() {
           )}
           <div>
             <label className="label">Email</label>
-            <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="vous@exemple.fr" required />
+            <input className="input" type="email" value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="vous@exemple.fr" required />
           </div>
           <div>
-            <label className="label">Mot de passe</label>
-            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+            <div className="flex items-center justify-between mb-1">
+              <label className="label mb-0">Mot de passe</label>
+              <Link href="/auth/forgot-password" className="text-xs text-teal-600 hover:underline">
+                Mot de passe oublié ?
+              </Link>
+            </div>
+            <input className="input" type="password" value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••" required />
           </div>
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? 'Connexion...' : 'Se connecter'}
