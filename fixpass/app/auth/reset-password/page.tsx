@@ -16,20 +16,35 @@ export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    // Supabase envoie le token dans le hash de l'URL
-    // On écoute l'événement PASSWORD_RECOVERY
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setReady(true)
+    // Lire le token depuis le hash de l'URL (#access_token=...&type=recovery)
+    const hash = window.location.hash
+    if (hash && hash.includes('type=recovery')) {
+      const params = new URLSearchParams(hash.substring(1))
+      const accessToken = params.get('access_token')
+      const refreshToken = params.get('refresh_token')
+
+      if (accessToken && refreshToken) {
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        }).then(({ error }) => {
+          if (error) {
+            setError('Lien invalide ou expiré. Demandez un nouveau lien.')
+          } else {
+            setReady(true)
+          }
+        })
       }
-    })
-
-    // Vérifier si on a déjà une session active via le hash
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setReady(true)
-    })
-
-    return () => subscription.unsubscribe()
+    } else {
+      // Vérifier si on a déjà une session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          setReady(true)
+        } else {
+          setError('Lien invalide ou expiré. Demandez un nouveau lien.')
+        }
+      })
+    }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,6 +89,15 @@ export default function ResetPasswordPage() {
             <p className="font-semibold text-gray-900">Mot de passe mis à jour !</p>
             <p className="text-sm text-gray-500">Redirection vers le dashboard...</p>
           </div>
+        ) : error ? (
+          <div className="card text-center space-y-4 py-8">
+            <div className="text-4xl mb-2">🔒</div>
+            <p className="font-semibold text-gray-900">Lien expiré</p>
+            <p className="text-sm text-gray-500">{error}</p>
+            <a href="/auth/forgot-password" className="btn-primary block text-center">
+              Demander un nouveau lien
+            </a>
+          </div>
         ) : !ready ? (
           <div className="card text-center py-10">
             <div className="text-3xl mb-3 animate-pulse">🔒</div>
@@ -81,9 +105,6 @@ export default function ResetPasswordPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="card space-y-4">
-            {error && (
-              <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>
-            )}
             <div>
               <label className="label">Nouveau mot de passe</label>
               <input className="input" type="password" value={password}
