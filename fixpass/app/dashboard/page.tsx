@@ -264,7 +264,6 @@ export default function DashboardPage() {
       setRecalcProgress({ done: i + 1, total: objects.length })
     }
 
-    // Recharger les objets avec les nouvelles estimations
     const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
     setObjects(data || [])
     setRecalculating(false)
@@ -275,6 +274,11 @@ export default function DashboardPage() {
   const totalResale = objects.reduce((sum, o) => sum + (o.resale_recommended || 0), 0)
   const activeWarranties = objects.filter(o => o.warranty_status === 'active').length
   const expiringWarranties = objects.filter(o => o.warranty_status === 'expiring_soon')
+
+  // Dépréciation en %
+  const depreciation = totalValue > 0 && totalResale > 0
+    ? Math.round(((totalValue - totalResale) / totalValue) * 100)
+    : null
 
   if (loading) {
     return (
@@ -340,16 +344,28 @@ export default function DashboardPage() {
           </h1>
         </div>
 
+        {/* Carte patrimoine */}
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
-            <p className="text-teal-100 text-xs">Patrimoine estimé</p>
+            <p className="text-teal-100 text-xs">Valeur de revente estimée</p>
             <div className="flex items-center gap-1 text-teal-100 text-xs">
               <TrendingUp size={12} />
               <span>{showChart ? 'Fermer' : 'Voir l\'évolution'}</span>
             </div>
           </div>
-          <p className="text-white text-4xl font-semibold">{formatPrice(totalValue)}</p>
-          <p className="text-teal-100 text-xs mt-1.5">{objects.length} objet{objects.length > 1 ? 's' : ''} enregistré{objects.length > 1 ? 's' : ''}</p>
+          <p className="text-white text-4xl font-semibold">
+            {totalResale > 0 ? formatPrice(totalResale) : formatPrice(totalValue)}
+          </p>
+          <div className="flex items-center justify-between mt-1.5">
+            <p className="text-teal-100 text-xs">
+              {objects.length} objet{objects.length > 1 ? 's' : ''} · Acheté {formatPrice(totalValue)}
+            </p>
+            {depreciation !== null && (
+              <p className="text-teal-100 text-xs font-medium">
+                -{depreciation}% de dépréciation
+              </p>
+            )}
+          </div>
           {showChart && (
             <div className="mt-4 bg-white rounded-xl p-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-2">
@@ -377,9 +393,9 @@ export default function DashboardPage() {
             <p className="text-xs text-gray-400 mt-1">sauvegardées</p>
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
-            <p className="text-xs text-gray-400 mb-1.5">Revente</p>
-            <p className="text-2xl font-semibold text-gray-900">{totalResale > 0 ? formatPrice(totalResale) : '—'}</p>
-            {totalResale > 0 && <p className="text-xs mt-1" style={{ color: '#1D9E75' }}>estimée</p>}
+            <p className="text-xs text-gray-400 mb-1.5">Investi</p>
+            <p className="text-lg font-semibold text-gray-900">{formatPrice(totalValue)}</p>
+            <p className="text-xs text-gray-400 mt-1">au total</p>
           </div>
         </div>
 
