@@ -21,9 +21,10 @@ export default function NewObjectPage() {
     purchase_date: '', purchase_price: '', currency: 'EUR',
     seller: '', order_number: '', warranty_months: '24',
     extended_warranty_months: '0', condition: 'good', notes: '',
+    is_second_hand: false,
   })
 
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +39,6 @@ export default function NewObjectPage() {
 
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
 
-    // Pas d'estimation mathématique — l'IA s'en charge juste après
     const { data, error } = await supabase.from('objects').insert({
       user_id: user.id,
       name: form.name,
@@ -56,6 +56,7 @@ export default function NewObjectPage() {
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition,
+      is_second_hand: form.is_second_hand,
       resale_min: null,
       resale_max: null,
       resale_recommended: null,
@@ -64,7 +65,6 @@ export default function NewObjectPage() {
 
     if (error) { alert('Erreur : ' + error.message); setLoading(false); return }
 
-    // Attendre l'estimation IA avant de rediriger
     setLoading(false)
     setEstimating(true)
     try {
@@ -75,6 +75,8 @@ export default function NewObjectPage() {
           name: data.name, brand: data.brand, model: data.model,
           category: data.category, purchase_date: data.purchase_date,
           condition: data.condition, repairs: [],
+          is_second_hand: form.is_second_hand,
+          purchase_price: price,
         }),
       })
       const estimate = await estimateRes.json()
@@ -107,6 +109,7 @@ export default function NewObjectPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="max-w-lg mx-auto px-4 py-6 space-y-5">
+
           <div className="card space-y-4">
             <h2 className="font-semibold text-gray-900">Informations générales</h2>
             <div>
@@ -138,6 +141,37 @@ export default function NewObjectPage() {
 
           <div className="card space-y-4">
             <h2 className="font-semibold text-gray-900">Achat</h2>
+
+            {/* Toggle Neuf / Occasion */}
+            <div>
+              <label className="label">Type d'achat</label>
+              <div className="flex gap-2 mt-1">
+                <button type="button"
+                  onClick={() => set('is_second_hand', false)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                    !form.is_second_hand
+                      ? 'bg-teal-400 border-teal-400 text-white'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}>
+                  ✨ Neuf
+                </button>
+                <button type="button"
+                  onClick={() => set('is_second_hand', true)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                    form.is_second_hand
+                      ? 'bg-orange-400 border-orange-400 text-white'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}>
+                  🔄 Occasion
+                </button>
+              </div>
+              {form.is_second_hand && (
+                <p className="text-xs text-orange-600 mt-1.5">
+                  L'estimation de revente tiendra compte du fait que l'objet était déjà d'occasion à l'achat.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Date d'achat</label>
@@ -150,7 +184,7 @@ export default function NewObjectPage() {
             </div>
             <div>
               <label className="label">Vendeur</label>
-              <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Amazon..." />
+              <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Amazon, Leboncoin..." />
             </div>
             <div>
               <label className="label">N° de commande</label>
