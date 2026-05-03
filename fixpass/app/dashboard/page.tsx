@@ -7,10 +7,63 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
 import { formatPrice, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw } from 'lucide-react'
+import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+// Calcul du Score FixPass
+function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, number>, hasHousehold: boolean) {
+  if (objects.length === 0) return { score: 0, actions: [], level: 'Débutant' }
+
+  const objectScores = objects.map(o => {
+    let pts = 0
+    if (docCounts[o.id] > 0) pts += 25          // Facture présente
+    if (o.warranty_end_date) pts += 20            // Garantie suivie
+    if (o.resale_recommended) pts += 20           // Estimation à jour
+    if (o.condition) pts += 20                    // État renseigné
+    if (o.serial_number) pts += 15               // Numéro de série
+    if (o.warranty_status === 'expired') pts -= 5 // Malus garantie expirée
+    return Math.max(0, Math.min(100, pts))
+  })
+
+  let score = Math.round(objectScores.reduce((a, b) => a + b, 0) / objects.length)
+  if (hasHousehold) score = Math.min(100, score + 5)
+
+  // Actions suggérées
+  const actions: { text: string; href: string; points: number }[] = []
+
+  const noDoc = objects.filter(o => !docCounts[o.id]).length
+  if (noDoc > 0) actions.push({
+    text: `Scanner ${noDoc} facture${noDoc > 1 ? 's' : ''} manquante${noDoc > 1 ? 's' : ''}`,
+    href: '/scan',
+    points: 25,
+  })
+
+  const noEstimate = objects.filter(o => !o.resale_recommended).length
+  if (noEstimate > 0) actions.push({
+    text: `Estimer ${noEstimate} objet${noEstimate > 1 ? 's' : ''} sans prix de revente`,
+    href: '/dashboard',
+    points: 20,
+  })
+
+  const noSerial = objects.filter(o => !o.serial_number).length
+  if (noSerial > 0) actions.push({
+    text: `Ajouter ${noSerial} numéro${noSerial > 1 ? 's' : ''} de série`,
+    href: '/objects',
+    points: 15,
+  })
+
+  if (!hasHousehold) actions.push({
+    text: 'Créer un foyer familial',
+    href: '/household',
+    points: 5,
+  })
+
+  const level = score >= 90 ? 'Expert FixPass 🏆' : score >= 70 ? 'Avancé 🌟' : score >= 40 ? 'En progression 📈' : 'Débutant 🌱'
+
+  return { score, actions: actions.slice(0, 3), level }
+}
 
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   const sorted = [...objects]
@@ -187,7 +240,10 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState('')
   const [showChart, setShowChart] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showScoreDetails, setShowScoreDetails] = useState(false)
   const [memberNames, setMemberNames] = useState<Record<string, string>>({})
+  const [hasHousehold, setHasHousehold] = useState(false)
+  const [docCounts, setDocCounts] = useState<Record<string, number>>({})
   const [recalculating, setRecalculating] = useState(false)
   const [recalcProgress, setRecalcProgress] = useState({ done: 0, total: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
@@ -204,7 +260,15 @@ export default function DashboardPage() {
       const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
       setObjects(data || [])
 
+      // Compter les documents par objet pour le score
+      const { data: docs } = await supabase.from('documents').select('object_id')
+      const counts: Record<string, number> = {}
+      docs?.forEach(d => { counts[d.object_id] = (counts[d.object_id] || 0) + 1 })
+      setDocCounts(counts)
+
       const { data: householdData } = await supabase.from('households').select('id').eq('owner_id', user.id).single()
+      setHasHousehold(!!householdData)
+
       if (householdData) {
         const { data: members } = await supabase.from('household_members').select('user_id').eq('household_id', householdData.id).neq('user_id', user.id)
         if (members && members.length > 0) {
@@ -274,11 +338,13 @@ export default function DashboardPage() {
   const totalResale = objects.reduce((sum, o) => sum + (o.resale_recommended || 0), 0)
   const activeWarranties = objects.filter(o => o.warranty_status === 'active').length
   const expiringWarranties = objects.filter(o => o.warranty_status === 'expiring_soon')
-
-  // Dépréciation en %
   const depreciation = totalValue > 0 && totalResale > 0
     ? Math.round(((totalValue - totalResale) / totalValue) * 100)
     : null
+
+  const { score, actions, level } = computeFixPassScore(objects, docCounts, hasHousehold)
+  const scoreColor = score >= 70 ? '#1D9E75' : score >= 40 ? '#EF9F27' : '#E24B4A'
+  const scoreBg = score >= 70 ? 'bg-green-50 border-green-200' : score >= 40 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
 
   if (loading) {
     return (
@@ -344,6 +410,51 @@ export default function DashboardPage() {
           </h1>
         </div>
 
+        {/* Score FixPass */}
+        {objects.length > 0 && (
+          <button onClick={() => setShowScoreDetails(!showScoreDetails)}
+            className={`w-full border rounded-2xl p-4 text-left transition-colors ${scoreBg}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                  style={{ background: scoreColor }}>
+                  {score}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Score FixPass</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{level}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-24 bg-gray-200 rounded-full h-2">
+                  <div className="h-2 rounded-full transition-all"
+                    style={{ width: `${score}%`, background: scoreColor }} />
+                </div>
+                {showScoreDetails ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+              </div>
+            </div>
+
+            {showScoreDetails && actions.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Actions pour améliorer votre score</p>
+                {actions.map((action, i) => (
+                  <Link key={i} href={action.href} onClick={e => e.stopPropagation()}
+                    className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                    <span className="text-sm text-gray-700">{action.text}</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white flex-shrink-0 ml-2"
+                      style={{ background: scoreColor }}>
+                      +{action.points} pts
+                    </span>
+                  </Link>
+                ))}
+                {actions.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-2">🏆 Score parfait ! Continuez comme ça.</p>
+                )}
+              </div>
+            )}
+          </button>
+        )}
+
         {/* Carte patrimoine */}
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
@@ -361,9 +472,7 @@ export default function DashboardPage() {
               {objects.length} objet{objects.length > 1 ? 's' : ''} · Acheté {formatPrice(totalValue)}
             </p>
             {depreciation !== null && (
-              <p className="text-teal-100 text-xs font-medium">
-                -{depreciation}% de dépréciation
-              </p>
+              <p className="text-teal-100 text-xs font-medium">-{depreciation}% dépréciation</p>
             )}
           </div>
           {showChart && (
@@ -388,9 +497,9 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
-            <p className="text-xs text-gray-400 mb-1.5">Factures</p>
+            <p className="text-xs text-gray-400 mb-1.5">Objets</p>
             <p className="text-2xl font-semibold text-gray-900">{objects.length}</p>
-            <p className="text-xs text-gray-400 mt-1">sauvegardées</p>
+            <p className="text-xs text-gray-400 mt-1">enregistrés</p>
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
             <p className="text-xs text-gray-400 mb-1.5">Investi</p>
@@ -409,7 +518,6 @@ export default function DashboardPage() {
           Mode sinistre — Dossier assurance
         </Link>
 
-        {/* Bouton recalculer toutes les estimations */}
         {recalculating ? (
           <div className="bg-white border border-gray-100 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
