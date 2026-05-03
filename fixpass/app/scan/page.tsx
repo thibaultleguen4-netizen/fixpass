@@ -25,6 +25,7 @@ interface ExtractedData {
   standard_warranty_months: number
   extended_warranty_detected: boolean
   extended_warranty_months: number
+  is_second_hand: boolean
   fields_to_confirm: string[]
   confidence_score: number
 }
@@ -109,11 +110,12 @@ export default function ScanPage() {
             warranty_months: data.standard_warranty_months?.toString() || '24',
             extended_warranty_months: data.extended_warranty_months?.toString() || '0',
             condition: 'good',
+            is_second_hand: data.is_second_hand || false,
           })
           setStep('confirm')
         } catch (err) {
           console.error('Extraction error:', err)
-          alert('Erreur lors de l\'analyse. Réessayez ou ajoutez manuellement.')
+          alert("Erreur lors de l'analyse. Réessayez ou ajoutez manuellement.")
           setStep('upload')
         }
       }
@@ -136,7 +138,6 @@ export default function ScanPage() {
 
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
 
-    // Pas d'estimation mathématique — on insère null, l'IA s'en charge juste après
     const { data: objData, error } = await supabase.from('objects').insert({
       user_id: user.id,
       name: form.name,
@@ -154,6 +155,7 @@ export default function ScanPage() {
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition || 'good',
+      is_second_hand: form.is_second_hand || false,
       resale_min: null,
       resale_max: null,
       resale_recommended: null,
@@ -179,7 +181,6 @@ export default function ScanPage() {
       }
     }
 
-    // Estimation IA — on attend avant de rediriger
     setStep('estimating')
     try {
       const estimateRes = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
@@ -189,6 +190,8 @@ export default function ScanPage() {
           name: objData.name, brand: objData.brand, model: objData.model,
           category: objData.category, purchase_date: objData.purchase_date,
           condition: objData.condition, repairs: [],
+          is_second_hand: form.is_second_hand || false,
+          purchase_price: price,
         }),
       })
       const estimateData = await estimateRes.json()
@@ -204,7 +207,7 @@ export default function ScanPage() {
     router.push(`/objects/${objData.id}`)
   }
 
-  const set = (k: string, v: string) => setForm((f: any) => ({ ...f, [k]: v }))
+  const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
   const needsConfirm = (field: string) => extracted?.fields_to_confirm?.includes(field)
 
   return (
@@ -240,7 +243,7 @@ export default function ScanPage() {
             <div className="text-4xl mb-4 animate-pulse">🔍</div>
             <p className="font-semibold text-gray-900">Analyse en cours...</p>
             <p className="text-sm text-gray-500 mt-2">
-              {file?.type === 'application/pdf' ? 'Conversion du PDF, puis analyse IA...' : 'L\'IA lit votre facture...'}
+              {file?.type === 'application/pdf' ? 'Conversion du PDF, puis analyse IA...' : "L'IA lit votre facture..."}
             </p>
           </div>
         )}
@@ -251,6 +254,16 @@ export default function ScanPage() {
               <CheckCircle size={16} className="text-green-600" />
               <span className="text-sm text-green-700 font-medium">Analyse terminée — vérifiez les données extraites</span>
             </div>
+
+            {extracted.is_second_hand && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                <span className="text-sm mt-0.5">🔄</span>
+                <div>
+                  <p className="text-sm text-blue-800 font-medium">Achat d'occasion détecté</p>
+                  <p className="text-xs text-blue-600 mt-0.5">L'IA a détecté que cet objet a été acheté d'occasion. L'estimation de revente sera ajustée en conséquence.</p>
+                </div>
+              </div>
+            )}
 
             {extracted.extended_warranty_detected && !extWarningDismissed && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
@@ -329,6 +342,36 @@ export default function ScanPage() {
                   <option value="poor">Mauvais état</option>
                 </select>
               </div>
+
+              {/* Toggle Neuf / Occasion */}
+              <div>
+                <label className="label">Type d'achat</label>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={() => set('is_second_hand', false)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                      !form.is_second_hand
+                        ? 'bg-teal-400 border-teal-400 text-white'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}>
+                    ✨ Neuf
+                  </button>
+                  <button
+                    onClick={() => set('is_second_hand', true)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                      form.is_second_hand
+                        ? 'bg-orange-400 border-orange-400 text-white'
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}>
+                    🔄 Occasion
+                  </button>
+                </div>
+                {form.is_second_hand && (
+                  <p className="text-xs text-orange-600 mt-1.5">
+                    L'estimation de revente tiendra compte du fait que l'objet était déjà d'occasion à l'achat.
+                  </p>
+                )}
+              </div>
             </div>
 
             <button onClick={handleSave} className="btn-primary w-full py-3">Créer la fiche objet →</button>
@@ -344,7 +387,7 @@ export default function ScanPage() {
               {step === 'saving' ? 'Sauvegarde en cours...' : 'Estimation de la valeur de revente...'}
             </p>
             <p className="text-sm text-gray-500 mt-2">
-              {step === 'saving' ? 'Enregistrement de votre objet' : 'L\'IA analyse le marché français, patientez...'}
+              {step === 'saving' ? 'Enregistrement de votre objet' : "L'IA analyse le marché français, patientez..."}
             </p>
           </div>
         )}
