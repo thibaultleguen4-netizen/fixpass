@@ -7,7 +7,10 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
 import { formatPrice, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle } from 'lucide-react'
+import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw } from 'lucide-react'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   const sorted = [...objects]
@@ -185,6 +188,8 @@ export default function DashboardPage() {
   const [showChart, setShowChart] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [memberNames, setMemberNames] = useState<Record<string, string>>({})
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcProgress, setRecalcProgress] = useState({ done: 0, total: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -196,45 +201,22 @@ export default function DashboardPage() {
       setUserInitials(name.slice(0, 2).toUpperCase())
       setUserId(user.id)
 
-      const { data } = await supabase
-        .from('objects')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
       setObjects(data || [])
 
-      // Charger les noms des membres du foyer
-      const { data: householdData } = await supabase
-        .from('households')
-        .select('id')
-        .eq('owner_id', user.id)
-        .single()
-
+      const { data: householdData } = await supabase.from('households').select('id').eq('owner_id', user.id).single()
       if (householdData) {
-        const { data: members } = await supabase
-          .from('household_members')
-          .select('user_id')
-          .eq('household_id', householdData.id)
-          .neq('user_id', user.id)
-
+        const { data: members } = await supabase.from('household_members').select('user_id').eq('household_id', householdData.id).neq('user_id', user.id)
         if (members && members.length > 0) {
-          // Récupérer les profils via auth
           const names: Record<string, string> = {}
           for (const m of members) {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('full_name, email')
-              .eq('id', m.user_id)
-              .single()
-            if (profileData) {
-              names[m.user_id] = profileData.full_name || profileData.email || 'Membre'
-            } else {
-              names[m.user_id] = 'Membre du foyer'
-            }
+            const { data: profileData } = await supabase.from('profiles').select('full_name, email').eq('id', m.user_id).single()
+            if (profileData) names[m.user_id] = profileData.full_name || profileData.email || 'Membre'
+            else names[m.user_id] = 'Membre du foyer'
           }
           setMemberNames(names)
         }
       }
-
       setLoading(false)
     }
     load()
@@ -242,9 +224,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false)
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -253,6 +233,42 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/')
+  }
+
+  const recalculateAllEstimates = async () => {
+    if (!confirm(`Recalculer les estimations de revente pour ${objects.length} objets via l'IA ? Cela peut prendre quelques minutes.`)) return
+    setRecalculating(true)
+    setRecalcProgress({ done: 0, total: objects.length })
+
+    for (let i = 0; i < objects.length; i++) {
+      const o = objects[i]
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate-resale`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({
+            name: o.name, brand: o.brand, model: o.model,
+            category: o.category, purchase_date: o.purchase_date,
+            condition: o.condition, repairs: [],
+          }),
+        })
+        const data = await res.json()
+        if (data.resale_recommended) {
+          await supabase.from('objects').update({
+            resale_min: data.resale_min,
+            resale_max: data.resale_max,
+            resale_recommended: data.resale_recommended,
+          }).eq('id', o.id)
+        }
+      } catch {}
+      setRecalcProgress({ done: i + 1, total: objects.length })
+    }
+
+    // Recharger les objets avec les nouvelles estimations
+    const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
+    setObjects(data || [])
+    setRecalculating(false)
+    setRecalcProgress({ done: 0, total: 0 })
   }
 
   const totalValue = objects.reduce((sum, o) => sum + (o.purchase_price || 0), 0)
@@ -377,6 +393,27 @@ export default function DashboardPage() {
           Mode sinistre — Dossier assurance
         </Link>
 
+        {/* Bouton recalculer toutes les estimations */}
+        {recalculating ? (
+          <div className="bg-white border border-gray-100 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-gray-900">Recalcul en cours...</p>
+              <p className="text-xs text-teal-600 font-medium">{recalcProgress.done}/{recalcProgress.total}</p>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div className="h-2 rounded-full bg-teal-400 transition-all"
+                style={{ width: `${(recalcProgress.done / recalcProgress.total) * 100}%` }} />
+            </div>
+            <p className="text-xs text-gray-400 mt-2">L'IA analyse le marché pour chaque objet...</p>
+          </div>
+        ) : (
+          <button onClick={recalculateAllEstimates}
+            className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors">
+            <RefreshCw size={15} />
+            Recalculer toutes les estimations via IA
+          </button>
+        )}
+
         <WarrantyCard objects={objects} />
 
         <div>
@@ -412,9 +449,7 @@ export default function DashboardPage() {
                         {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}
                       </p>
                       {isOther && memberName && (
-                        <p className="text-xs text-teal-600 font-medium mt-0.5">
-                          👤 {memberName}
-                        </p>
+                        <p className="text-xs text-teal-600 font-medium mt-0.5">👤 {memberName}</p>
                       )}
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${WARRANTY_COLORS[o.warranty_status || 'unknown']}`}>
