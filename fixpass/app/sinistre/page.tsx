@@ -20,6 +20,7 @@ const SINISTRE_TYPES = [
 
 interface ObjectWithDoc extends ObjectItem {
   document_url?: string
+  ownerName?: string
 }
 
 export default function SinisterPage() {
@@ -31,43 +32,77 @@ export default function SinisterPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [generating, setGenerating] = useState(false)
   const [userName, setUserName] = useState('')
+  const [userId, setUserId] = useState('')
+  const [isOwner, setIsOwner] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
       setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utilisateur')
+      setUserId(user.id)
 
-      const { data: objs } = await supabase.from('objects').select('*').order('purchase_price', { ascending: false })
+      // Vérifier si chef de foyer
+      const { data: householdData } = await supabase
+        .from('households')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single()
+
+      setIsOwner(!!householdData)
+
+      // Récupérer les noms des membres si chef
+      const memberNames: Record<string, string> = {}
+      if (householdData) {
+        const { data: members } = await supabase
+          .from('household_members')
+          .select('user_id')
+          .eq('household_id', householdData.id)
+          .neq('user_id', user.id)
+
+        for (const m of members || []) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', m.user_id)
+            .single()
+          memberNames[m.user_id] = profile?.full_name || profile?.email?.split('@')[0] || 'Membre'
+        }
+      }
+
+      // Charger tous les objets (RLS retourne automatiquement ceux des membres si chef)
+      const { data: objs } = await supabase
+        .from('objects')
+        .select('*')
+        .order('purchase_price', { ascending: false })
       if (!objs) { setLoading(false); return }
 
-      // Récupérer les documents (factures) pour chaque objet
+      // Récupérer les documents
       const { data: docs } = await supabase
         .from('documents')
         .select('object_id, file_url')
         .eq('type', 'receipt')
 
-      // Créer un map object_id -> file_url
       const docMap: Record<string, string> = {}
-      docs?.forEach(d => {
-        if (!docMap[d.object_id]) docMap[d.object_id] = d.file_url
-      })
+      docs?.forEach(d => { if (!docMap[d.object_id]) docMap[d.object_id] = d.file_url })
 
-      // Générer URLs signées pour chaque facture
+      // Générer URLs signées
       const objectsWithDocs = await Promise.all(objs.map(async (o) => {
         const fileUrl = docMap[o.id]
-        if (!fileUrl) return { ...o, document_url: undefined }
+        const ownerName = o.user_id !== user.id ? memberNames[o.user_id] : undefined
+
+        if (!fileUrl) return { ...o, document_url: undefined, ownerName }
 
         try {
           const urlParts = fileUrl.split('/fixpass-documents/')
-          if (urlParts.length < 2) return { ...o, document_url: fileUrl }
+          if (urlParts.length < 2) return { ...o, document_url: fileUrl, ownerName }
           const path = decodeURIComponent(urlParts[1].split('?')[0])
           const { data } = await supabase.storage
             .from('fixpass-documents')
             .createSignedUrl(path, 3600)
-          return { ...o, document_url: data?.signedUrl || fileUrl }
+          return { ...o, document_url: data?.signedUrl || fileUrl, ownerName }
         } catch {
-          return { ...o, document_url: fileUrl }
+          return { ...o, document_url: fileUrl, ownerName }
         }
       }))
 
@@ -100,6 +135,10 @@ export default function SinisterPage() {
   const withSerial = selectedObjects.filter(o => o.serial_number).length
   const withDoc = selectedObjects.filter(o => (o as ObjectWithDoc).document_url).length
 
+  // Grouper par propriétaire pour l'affichage
+  const myObjects = objects.filter(o => o.user_id === userId)
+  const memberObjects = objects.filter(o => o.user_id !== userId)
+
   const generatePDF = async () => {
     if (selectedObjects.length === 0) { alert('Sélectionnez au moins un objet.'); return }
     setGenerating(true)
@@ -131,6 +170,42 @@ export default function SinisterPage() {
     setGenerating(false)
   }
 
+  const ObjectCard = ({ o }: { o: ObjectWithDoc }) => {
+    const selected = selectedIds.has(o.id)
+    const hasDoc = !!o.document_url
+    return (
+      <button onClick={() => toggleObject(o.id)}
+        className={`w-full bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 transition-colors ${
+          selected ? 'border-red-300' : 'border-gray-100 opacity-60'
+        }`}>
+        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+          {getCategoryEmoji(o.category)}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null].filter(Boolean).join(' · ')}
+          </p>
+          {o.ownerName && (
+            <p className="text-xs text-teal-600 font-medium mt-0.5">👤 {o.ownerName}</p>
+          )}
+          <p className={`text-xs mt-0.5 font-medium ${hasDoc ? 'text-teal-600' : 'text-gray-300'}`}>
+            {hasDoc ? '🧾 Facture + QR code' : '— Pas de facture'}
+          </p>
+        </div>
+        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
+          selected ? 'border-red-500 bg-red-500' : 'border-gray-300'
+        }`}>
+          {selected && (
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 4L4 7L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+      </button>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -160,7 +235,8 @@ export default function SinisterPage() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
           <p className="text-sm font-medium text-red-800 mb-1">🛡️ Dossier d'urgence assurance</p>
           <p className="text-xs text-red-600 leading-relaxed">
-            Le PDF généré contient un <strong>QR code par objet</strong> qui renvoie directement vers la facture originale. L'assureur peut scanner le QR pour vérifier instantanément chaque document.
+            Le PDF généré contient un <strong>QR code par objet</strong> qui renvoie directement vers la facture originale.
+            {isOwner && <span> Les objets de tous les membres du foyer sont inclus.</span>}
           </p>
         </div>
 
@@ -194,40 +270,23 @@ export default function SinisterPage() {
             </span>
           </button>
 
-          <div className="space-y-2">
-            {objects.map(o => {
-              const selected = selectedIds.has(o.id)
-              const hasDoc = !!(o as ObjectWithDoc).document_url
-              return (
-                <button key={o.id} onClick={() => toggleObject(o.id)}
-                  className={`w-full bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 transition-colors ${
-                    selected ? 'border-red-300' : 'border-gray-100 opacity-60'
-                  }`}>
-                  <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-                    {getCategoryEmoji(o.category)}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null].filter(Boolean).join(' · ')}
-                    </p>
-                    <p className={`text-xs mt-0.5 font-medium ${hasDoc ? 'text-teal-600' : 'text-gray-300'}`}>
-                      {hasDoc ? '🧾 Facture + QR code' : '— Pas de facture'}
-                    </p>
-                  </div>
-                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${
-                    selected ? 'border-red-500 bg-red-500' : 'border-gray-300'
-                  }`}>
-                    {selected && (
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                        <path d="M1 4L4 7L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+          {/* Mes objets */}
+          {myObjects.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {isOwner && memberObjects.length > 0 && (
+                <p className="text-xs font-medium text-gray-400 mb-2">Mes objets ({myObjects.length})</p>
+              )}
+              {myObjects.map(o => <ObjectCard key={o.id} o={o} />)}
+            </div>
+          )}
+
+          {/* Objets des membres */}
+          {isOwner && memberObjects.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-teal-600 mb-2">🏠 Objets des membres du foyer ({memberObjects.length})</p>
+              {memberObjects.map(o => <ObjectCard key={o.id} o={o} />)}
+            </div>
+          )}
         </div>
 
         {/* Étape 3 */}
