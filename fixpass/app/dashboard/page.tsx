@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase'
 import { ObjectItem } from '@/lib/types'
 import { formatPrice, getCategoryEmoji, daysUntilExpiry } from '@/lib/utils'
 import { WARRANTY_LABELS, WARRANTY_COLORS } from '@/lib/types'
-import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,51 +18,176 @@ function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, nu
 
   const objectScores = objects.map(o => {
     let pts = 0
-    if (docCounts[o.id] > 0) pts += 25          // Facture présente
-    if (o.warranty_end_date) pts += 20            // Garantie suivie
-    if (o.resale_recommended) pts += 20           // Estimation à jour
-    if (o.condition) pts += 20                    // État renseigné
-    if (o.serial_number) pts += 15               // Numéro de série
-    if (o.warranty_status === 'expired') pts -= 5 // Malus garantie expirée
+    if (docCounts[o.id] > 0) pts += 25
+    if (o.warranty_end_date) pts += 20
+    if (o.resale_recommended) pts += 20
+    if (o.condition) pts += 20
+    if (o.serial_number) pts += 15
+    if (o.warranty_status === 'expired') pts -= 5
     return Math.max(0, Math.min(100, pts))
   })
 
   let score = Math.round(objectScores.reduce((a, b) => a + b, 0) / objects.length)
   if (hasHousehold) score = Math.min(100, score + 5)
 
-  // Actions suggérées
   const actions: { text: string; href: string; points: number }[] = []
-
   const noDoc = objects.filter(o => !docCounts[o.id]).length
-  if (noDoc > 0) actions.push({
-    text: `Scanner ${noDoc} facture${noDoc > 1 ? 's' : ''} manquante${noDoc > 1 ? 's' : ''}`,
-    href: '/scan',
-    points: 25,
-  })
-
+  if (noDoc > 0) actions.push({ text: `Scanner ${noDoc} facture${noDoc > 1 ? 's' : ''} manquante${noDoc > 1 ? 's' : ''}`, href: '/scan', points: 25 })
   const noEstimate = objects.filter(o => !o.resale_recommended).length
-  if (noEstimate > 0) actions.push({
-    text: `Estimer ${noEstimate} objet${noEstimate > 1 ? 's' : ''} sans prix de revente`,
-    href: '/dashboard',
-    points: 20,
-  })
-
+  if (noEstimate > 0) actions.push({ text: `Estimer ${noEstimate} objet${noEstimate > 1 ? 's' : ''} sans prix de revente`, href: '/dashboard', points: 20 })
   const noSerial = objects.filter(o => !o.serial_number).length
-  if (noSerial > 0) actions.push({
-    text: `Ajouter ${noSerial} numéro${noSerial > 1 ? 's' : ''} de série`,
-    href: '/objects',
-    points: 15,
-  })
-
-  if (!hasHousehold) actions.push({
-    text: 'Créer un foyer familial',
-    href: '/household',
-    points: 5,
-  })
+  if (noSerial > 0) actions.push({ text: `Ajouter ${noSerial} numéro${noSerial > 1 ? 's' : ''} de série`, href: '/objects', points: 15 })
+  if (!hasHousehold) actions.push({ text: 'Créer un foyer familial', href: '/household', points: 5 })
 
   const level = score >= 90 ? 'Expert FixPass 🏆' : score >= 70 ? 'Avancé 🌟' : score >= 40 ? 'En progression 📈' : 'Débutant 🌱'
-
   return { score, actions: actions.slice(0, 3), level }
+}
+
+// Composant Onboarding
+function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem[], hasHousehold: boolean, userId: string }) {
+  const [dismissed, setDismissed] = useState(false)
+  const [visitedSinistre, setVisitedSinistre] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const d = localStorage.getItem(`fixpass_onboarding_done_${userId}`)
+    if (d === 'true') setDismissed(true)
+    const s = localStorage.getItem(`fixpass_visited_sinistre_${userId}`)
+    if (s === 'true') setVisitedSinistre(true)
+  }, [userId])
+
+  const steps = [
+    {
+      id: 'scan',
+      icon: '📄',
+      title: 'Scanner votre première facture',
+      desc: 'Importez une photo ou un PDF — l\'IA extrait tout automatiquement',
+      href: '/scan',
+      done: objects.length > 0,
+    },
+    {
+      id: 'dashboard',
+      icon: '📊',
+      title: 'Découvrir votre patrimoine',
+      desc: 'Valeur de revente, garanties, dépréciation — tout est ici',
+      href: null,
+      done: true, // Toujours coché car ils sont sur le dashboard
+    },
+    {
+      id: 'sinistre',
+      icon: '🚨',
+      title: 'Préparer votre dossier sinistre',
+      desc: 'En cas de vol ou sinistre, générez un PDF avec QR codes en 30 secondes',
+      href: '/sinistre',
+      done: visitedSinistre,
+    },
+    {
+      id: 'household',
+      icon: '🏠',
+      title: 'Inviter votre famille',
+      desc: 'Regroupez les objets de tout le foyer en un seul coffre',
+      href: '/household',
+      done: hasHousehold,
+    },
+  ]
+
+  const completedCount = steps.filter(s => s.done).length
+  const allDone = completedCount === steps.length
+
+  const handleDismiss = () => {
+    localStorage.setItem(`fixpass_onboarding_done_${userId}`, 'true')
+    setDismissed(true)
+  }
+
+  const handleStepClick = (stepId: string) => {
+    if (stepId === 'sinistre') {
+      localStorage.setItem(`fixpass_visited_sinistre_${userId}`, 'true')
+      setVisitedSinistre(true)
+    }
+  }
+
+  if (dismissed) return null
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#F0FBF6' }}>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {allDone ? '🏆 Coffre prêt !' : '🚀 Découvrez FixPass'}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {allDone ? 'Vous maîtrisez toutes les fonctionnalités' : `${completedCount}/${steps.length} étapes complétées`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Barre de progression */}
+          <div className="w-16 bg-gray-200 rounded-full h-1.5">
+            <div className="h-1.5 rounded-full transition-all" style={{ width: `${(completedCount / steps.length) * 100}%`, background: '#1D9E75' }} />
+          </div>
+          <button onClick={handleDismiss} className="text-gray-400 hover:text-gray-600 p-1">
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div className="divide-y divide-gray-50">
+        {steps.map(step => (
+          <div key={step.id}>
+            {step.href && !step.done ? (
+              <Link href={step.href} onClick={() => handleStepClick(step.id)}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'
+                }`}>
+                  {step.done
+                    ? <Check size={12} className="text-white" />
+                    : <span className="text-sm">{step.icon}</span>
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                    {step.title}
+                  </p>
+                  {!step.done && <p className="text-xs text-gray-400 mt-0.5 truncate">{step.desc}</p>}
+                </div>
+                {!step.done && <span className="text-gray-300 text-lg flex-shrink-0">›</span>}
+              </Link>
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'
+                }`}>
+                  {step.done
+                    ? <Check size={12} className="text-white" />
+                    : <span className="text-sm">{step.icon}</span>
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                    {step.title}
+                  </p>
+                  {!step.done && <p className="text-xs text-gray-400 mt-0.5 truncate">{step.desc}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer si tout complété */}
+      {allDone && (
+        <div className="px-4 py-3 border-t border-gray-50 flex items-center justify-between">
+          <p className="text-xs text-gray-400">Vous pouvez masquer cette carte</p>
+          <button onClick={handleDismiss}
+            className="text-xs text-teal-600 font-medium hover:underline">
+            Masquer
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
@@ -260,7 +385,6 @@ export default function DashboardPage() {
       const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
       setObjects(data || [])
 
-      // Compter les documents par objet pour le score
       const { data: docs } = await supabase.from('documents').select('object_id')
       const counts: Record<string, number> = {}
       docs?.forEach(d => { counts[d.object_id] = (counts[d.object_id] || 0) + 1 })
@@ -410,6 +534,11 @@ export default function DashboardPage() {
           </h1>
         </div>
 
+        {/* Onboarding */}
+        {userId && (
+          <OnboardingCard objects={objects} hasHousehold={hasHousehold} userId={userId} />
+        )}
+
         {/* Score FixPass */}
         {objects.length > 0 && (
           <button onClick={() => setShowScoreDetails(!showScoreDetails)}
@@ -434,10 +563,10 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {showScoreDetails && actions.length > 0 && (
+            {showScoreDetails && (
               <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Actions pour améliorer votre score</p>
-                {actions.map((action, i) => (
+                {actions.length > 0 ? actions.map((action, i) => (
                   <Link key={i} href={action.href} onClick={e => e.stopPropagation()}
                     className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors">
                     <span className="text-sm text-gray-700">{action.text}</span>
@@ -446,8 +575,7 @@ export default function DashboardPage() {
                       +{action.points} pts
                     </span>
                   </Link>
-                ))}
-                {actions.length === 0 && (
+                )) : (
                   <p className="text-sm text-gray-500 text-center py-2">🏆 Score parfait ! Continuez comme ça.</p>
                 )}
               </div>
