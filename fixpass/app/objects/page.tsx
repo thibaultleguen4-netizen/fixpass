@@ -117,7 +117,11 @@ export default function ObjectsPage() {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
-  const expiringSoon = filtered.filter(o => o.warranty_status === 'expiring_soon' || (daysUntilExpiry(o.warranty_end_date) ?? 999) <= 30)
+  const expiringSoon = filtered.filter(o => 
+  (o.warranty_status === 'expiring_soon' || (daysUntilExpiry(o.warranty_end_date) ?? 999) <= 30) 
+  && o.warranty_status !== 'expired'
+  && (daysUntilExpiry(o.warranty_end_date) ?? -1) > 0
+)
   const rest = filtered.filter(o => !expiringSoon.includes(o))
 
   const usedCategories = ['Tous', ...CATEGORIES.filter(c => objects.some(o => o.category === c))]
