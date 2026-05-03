@@ -155,6 +155,7 @@ export default function ObjectDetailPage() {
         body: JSON.stringify({
           name: obj.name, brand: obj.brand, model: obj.model, category: obj.category,
           purchase_date: obj.purchase_date, purchase_price: obj.purchase_price, condition: obj.condition,
+          is_second_hand: (obj as any).is_second_hand || false,
           repairs: repairs.map(r => ({ title: r.title, date: r.repair_date, cost: r.cost, description: r.description })),
         }),
       })
@@ -273,10 +274,17 @@ export default function ObjectDetailPage() {
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-gray-900">{obj.name}</h2>
               <p className="text-gray-500 text-sm mt-0.5">{[obj.brand, obj.model].filter(Boolean).join(' · ')}</p>
-              <span className={`inline-block mt-2 text-xs px-2.5 py-1 rounded-full font-medium ${WARRANTY_COLORS[obj.warranty_status || 'unknown']}`}>
-                {WARRANTY_LABELS[obj.warranty_status || 'unknown']}
-                {daysLeft !== null && daysLeft > 0 && ` · ${daysLeft} jours restants`}
-              </span>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${WARRANTY_COLORS[obj.warranty_status || 'unknown']}`}>
+                  {WARRANTY_LABELS[obj.warranty_status || 'unknown']}
+                  {daysLeft !== null && daysLeft > 0 && ` · ${daysLeft} jours restants`}
+                </span>
+                {(obj as any).is_second_hand && (
+                  <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-700">
+                    🔄 Occasion
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
