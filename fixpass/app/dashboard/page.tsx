@@ -71,7 +71,7 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
       title: 'Découvrir votre patrimoine',
       desc: 'Valeur de revente, garanties, dépréciation — tout est ici',
       href: null,
-      done: true, // Toujours coché car ils sont sur le dashboard
+      done: true,
     },
     {
       id: 'sinistre',
@@ -110,7 +110,6 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-      {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#F0FBF6' }}>
         <div>
           <p className="text-sm font-semibold text-gray-900">
@@ -121,7 +120,6 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Barre de progression */}
           <div className="w-16 bg-gray-200 rounded-full h-1.5">
             <div className="h-1.5 rounded-full transition-all" style={{ width: `${(completedCount / steps.length) * 100}%`, background: '#1D9E75' }} />
           </div>
@@ -131,43 +129,28 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
         </div>
       </div>
 
-      {/* Steps */}
       <div className="divide-y divide-gray-50">
         {steps.map(step => (
           <div key={step.id}>
             {step.href && !step.done ? (
               <Link href={step.href} onClick={() => handleStepClick(step.id)}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                  step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'
-                }`}>
-                  {step.done
-                    ? <Check size={12} className="text-white" />
-                    : <span className="text-sm">{step.icon}</span>
-                  }
+                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'}`}>
+                  {step.done ? <Check size={12} className="text-white" /> : <span className="text-sm">{step.icon}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                    {step.title}
-                  </p>
+                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{step.title}</p>
                   {!step.done && <p className="text-xs text-gray-400 mt-0.5 truncate">{step.desc}</p>}
                 </div>
                 {!step.done && <span className="text-gray-300 text-lg flex-shrink-0">›</span>}
               </Link>
             ) : (
               <div className="flex items-center gap-3 px-4 py-3">
-                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                  step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'
-                }`}>
-                  {step.done
-                    ? <Check size={12} className="text-white" />
-                    : <span className="text-sm">{step.icon}</span>
-                  }
+                <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'}`}>
+                  {step.done ? <Check size={12} className="text-white" /> : <span className="text-sm">{step.icon}</span>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                    {step.title}
-                  </p>
+                  <p className={`text-sm font-medium ${step.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{step.title}</p>
                   {!step.done && <p className="text-xs text-gray-400 mt-0.5 truncate">{step.desc}</p>}
                 </div>
               </div>
@@ -176,14 +159,10 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
         ))}
       </div>
 
-      {/* Footer si tout complété */}
       {allDone && (
         <div className="px-4 py-3 border-t border-gray-50 flex items-center justify-between">
           <p className="text-xs text-gray-400">Vous pouvez masquer cette carte</p>
-          <button onClick={handleDismiss}
-            className="text-xs text-teal-600 font-medium hover:underline">
-            Masquer
-          </button>
+          <button onClick={handleDismiss} className="text-xs text-teal-600 font-medium hover:underline">Masquer</button>
         </div>
       )}
     </div>
@@ -196,11 +175,7 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
     .sort((a, b) => new Date(a.purchase_date!).getTime() - new Date(b.purchase_date!).getTime())
 
   if (sorted.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
-        Pas assez de données pour afficher le graphique
-      </div>
-    )
+    return <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Pas assez de données pour afficher le graphique</div>
   }
 
   let cumAchat = 0
@@ -331,9 +306,7 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
                 <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                   <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: colors.bar }} />
                 </div>
-                <span className="text-xs font-medium w-10 text-right flex-shrink-0" style={{ color: colors.text }}>
-                  {days} j
-                </span>
+                <span className="text-xs font-medium w-10 text-right flex-shrink-0" style={{ color: colors.text }}>{days} j</span>
               </div>
             </Link>
           )
@@ -438,6 +411,8 @@ export default function DashboardPage() {
             name: o.name, brand: o.brand, model: o.model,
             category: o.category, purchase_date: o.purchase_date,
             condition: o.condition, repairs: [],
+            is_second_hand: (o as any).is_second_hand || false,
+            purchase_price: o.purchase_price,
           }),
         })
         const data = await res.json()
@@ -483,7 +458,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -534,12 +508,10 @@ export default function DashboardPage() {
           </h1>
         </div>
 
-        {/* Onboarding */}
         {userId && (
           <OnboardingCard objects={objects} hasHousehold={hasHousehold} userId={userId} />
         )}
 
-        {/* Score FixPass */}
         {objects.length > 0 && (
           <button onClick={() => setShowScoreDetails(!showScoreDetails)}
             className={`w-full border rounded-2xl p-4 text-left transition-colors ${scoreBg}`}>
@@ -556,8 +528,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div className="h-2 rounded-full transition-all"
-                    style={{ width: `${score}%`, background: scoreColor }} />
+                  <div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, background: scoreColor }} />
                 </div>
                 {showScoreDetails ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
               </div>
@@ -583,7 +554,6 @@ export default function DashboardPage() {
           </button>
         )}
 
-        {/* Carte patrimoine */}
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
             <p className="text-teal-100 text-xs">Valeur de revente estimée</p>
@@ -607,9 +577,7 @@ export default function DashboardPage() {
             <div className="mt-4 bg-white rounded-xl p-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-gray-900">Évolution du patrimoine</p>
-                <button onClick={() => setShowChart(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={16} />
-                </button>
+                <button onClick={() => setShowChart(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
               </div>
               <PatrimoineChart objects={objects} />
             </div>
@@ -733,7 +701,6 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-
     </div>
   )
 }
