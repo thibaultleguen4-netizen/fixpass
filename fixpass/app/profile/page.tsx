@@ -269,20 +269,30 @@ export default function ProfilePage() {
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">À propos</p>
           <div className="space-y-0">
-            {[
-              { icon: '📄', label: 'Mentions légales', href: '#' },
-              { icon: '🛡️', label: 'Politique de confidentialité', href: '#' },
-              { icon: '💬', label: 'Nous contacter', href: 'mailto:contact@fixpass.fr' },
-            ].map(item => (
-              <a key={item.label} href={item.href}
-                className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">{item.icon}</span>
-                  <span className="text-sm text-gray-900">{item.label}</span>
-                </div>
-                <span className="text-gray-300 text-lg">›</span>
-              </a>
-            ))}
+            <Link href="/mentions-legales"
+              className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">📄</span>
+                <span className="text-sm text-gray-900">Mentions légales</span>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </Link>
+            <Link href="/mentions-legales"
+              className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🛡️</span>
+                <span className="text-sm text-gray-900">Politique de confidentialité</span>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </Link>
+            <a href="mailto:thibaultleguen4@gmail.com"
+              className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">💬</span>
+                <span className="text-sm text-gray-900">Nous contacter</span>
+              </div>
+              <span className="text-gray-300 text-lg">›</span>
+            </a>
           </div>
         </div>
 
