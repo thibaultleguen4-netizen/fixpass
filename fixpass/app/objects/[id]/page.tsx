@@ -280,11 +280,15 @@ purchase_type: (obj as any).purchase_type || 'new',
                   {WARRANTY_LABELS[obj.warranty_status || 'unknown']}
                   {daysLeft !== null && daysLeft > 0 && ` · ${daysLeft} jours restants`}
                 </span>
-                {(obj as any).is_second_hand && (
-                  <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-700">
-                    🔄 Occasion
-                  </span>
-                )}
+              {(obj as any).purchase_type && (obj as any).purchase_type !== 'new' && (
+  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+    (obj as any).purchase_type === 'refurbished'
+      ? 'bg-blue-100 text-blue-700'
+      : 'bg-orange-100 text-orange-700'
+  }`}>
+    {(obj as any).purchase_type === 'refurbished' ? '♻️ Reconditionné' : '🔄 Occasion'}
+  </span>
+)}
               </div>
             </div>
           </div>
