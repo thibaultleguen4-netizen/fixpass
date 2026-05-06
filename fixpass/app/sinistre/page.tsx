@@ -42,7 +42,6 @@ export default function SinisterPage() {
       setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utilisateur')
       setUserId(user.id)
 
-      // Vérifier si chef de foyer
       const { data: householdData } = await supabase
         .from('households')
         .select('id')
@@ -51,7 +50,6 @@ export default function SinisterPage() {
 
       setIsOwner(!!householdData)
 
-      // Récupérer les noms des membres si chef
       const memberNames: Record<string, string> = {}
       if (householdData) {
         const { data: members } = await supabase
@@ -70,14 +68,12 @@ export default function SinisterPage() {
         }
       }
 
-      // Charger tous les objets (RLS retourne automatiquement ceux des membres si chef)
       const { data: objs } = await supabase
         .from('objects')
         .select('*')
         .order('purchase_price', { ascending: false })
       if (!objs) { setLoading(false); return }
 
-      // Récupérer les documents
       const { data: docs } = await supabase
         .from('documents')
         .select('object_id, file_url')
@@ -86,7 +82,6 @@ export default function SinisterPage() {
       const docMap: Record<string, string> = {}
       docs?.forEach(d => { if (!docMap[d.object_id]) docMap[d.object_id] = d.file_url })
 
-      // Générer URLs signées
       const objectsWithDocs = await Promise.all(objs.map(async (o) => {
         const fileUrl = docMap[o.id]
         const ownerName = o.user_id !== user.id ? memberNames[o.user_id] : undefined
@@ -135,7 +130,6 @@ export default function SinisterPage() {
   const withSerial = selectedObjects.filter(o => o.serial_number).length
   const withDoc = selectedObjects.filter(o => (o as ObjectWithDoc).document_url).length
 
-  // Grouper par propriétaire pour l'affichage
   const myObjects = objects.filter(o => o.user_id === userId)
   const memberObjects = objects.filter(o => o.user_id !== userId)
 
@@ -158,12 +152,17 @@ export default function SinisterPage() {
       const data = await res.json()
       if (!data.html) { alert('Erreur lors de la génération.'); setGenerating(false); return }
 
-      const win = window.open('', '_blank')
-      if (win) {
-        win.document.write(data.html)
-        win.document.close()
-        setTimeout(() => win.print(), 800)
-      }
+      // Créer un blob HTML et le télécharger — compatible mobile
+      const blob = new Blob([data.html], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `dossier-sinistre-fixpass-${new Date().toISOString().split('T')[0]}.html`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
     } catch {
       alert('Erreur lors de la génération.')
     }
@@ -235,12 +234,11 @@ export default function SinisterPage() {
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
           <p className="text-sm font-medium text-red-800 mb-1">🛡️ Dossier d'urgence assurance</p>
           <p className="text-xs text-red-600 leading-relaxed">
-            Le PDF généré contient un <strong>QR code par objet</strong> qui renvoie directement vers la facture originale.
+            Le dossier généré contient un <strong>QR code par objet</strong> qui renvoie directement vers la facture originale.
             {isOwner && <span> Les objets de tous les membres du foyer sont inclus.</span>}
           </p>
         </div>
 
-        {/* Étape 1 */}
         <div>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">1 — Type de sinistre</p>
           <div className="grid grid-cols-2 gap-2">
@@ -258,7 +256,6 @@ export default function SinisterPage() {
           </div>
         </div>
 
-        {/* Étape 2 */}
         <div>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">2 — Objets concernés</p>
           <button onClick={toggleAll} className="w-full flex items-center justify-between py-2 px-1 mb-2">
@@ -270,7 +267,6 @@ export default function SinisterPage() {
             </span>
           </button>
 
-          {/* Mes objets */}
           {myObjects.length > 0 && (
             <div className="space-y-2 mb-3">
               {isOwner && memberObjects.length > 0 && (
@@ -280,7 +276,6 @@ export default function SinisterPage() {
             </div>
           )}
 
-          {/* Objets des membres */}
           {isOwner && memberObjects.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-teal-600 mb-2">🏠 Objets des membres du foyer ({memberObjects.length})</p>
@@ -289,14 +284,13 @@ export default function SinisterPage() {
           )}
         </div>
 
-        {/* Étape 3 */}
         {selectedObjects.length > 0 && (
           <div>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">3 — Récapitulatif</p>
             <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-2">
               {[
                 { label: 'Objets sélectionnés', value: `${selectedObjects.length} objet${selectedObjects.length > 1 ? 's' : ''}` },
-                { label: 'Valeur d\'achat totale', value: formatPrice(totalAchat), color: 'text-red-600' },
+                { label: "Valeur d'achat totale", value: formatPrice(totalAchat), color: 'text-red-600' },
                 { label: 'Valeur de remplacement', value: formatPrice(totalRevente), color: 'text-teal-600' },
                 { label: 'Préjudice déclaré', value: formatPrice(totalAchat), color: 'text-red-700 font-semibold' },
                 { label: 'QR codes factures', value: `${withDoc} / ${selectedObjects.length}`, color: withDoc === selectedObjects.length ? 'text-teal-600' : 'text-yellow-600' },
@@ -319,7 +313,7 @@ export default function SinisterPage() {
             {generating ? 'Génération en cours...' : '🛡️ Générer le dossier PDF'}
           </button>
           <p className="text-xs text-gray-400 text-center">
-            Le PDF s'ouvre dans un nouvel onglet. Utilisez <strong>Fichier → Enregistrer en PDF</strong> pour le sauvegarder.
+            Le dossier se télécharge automatiquement. Ouvrez-le dans votre navigateur pour l'imprimer en PDF.
           </p>
         </div>
 
