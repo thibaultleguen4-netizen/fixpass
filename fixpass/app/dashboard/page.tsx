@@ -12,7 +12,6 @@ import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw, 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Modale de confirmation personnalisée
 function ConfirmModal({ count, onConfirm, onCancel }: { count: number, onConfirm: () => void, onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-8" style={{ background: 'rgba(0,0,0,0.4)' }}>
@@ -32,25 +31,16 @@ function ConfirmModal({ count, onConfirm, onCancel }: { count: number, onConfirm
           </p>
         </div>
         <div className="flex border-t border-gray-100">
-          <button onClick={onCancel}
-            className="flex-1 py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors border-r border-gray-100">
-            Annuler
-          </button>
-          <button onClick={onConfirm}
-            className="flex-1 py-4 text-sm font-semibold transition-colors"
-            style={{ color: '#1D9E75' }}>
-            Lancer le recalcul
-          </button>
+          <button onClick={onCancel} className="flex-1 py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors border-r border-gray-100">Annuler</button>
+          <button onClick={onConfirm} className="flex-1 py-4 text-sm font-semibold transition-colors" style={{ color: '#1D9E75' }}>Lancer le recalcul</button>
         </div>
       </div>
     </div>
   )
 }
 
-// Calcul du Score FixPass
 function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, number>, hasHousehold: boolean) {
   if (objects.length === 0) return { score: 0, actions: [], level: 'Débutant' }
-
   const objectScores = objects.map(o => {
     let pts = 0
     if (docCounts[o.id] > 0) pts += 25
@@ -61,10 +51,8 @@ function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, nu
     if (o.warranty_status === 'expired') pts -= 5
     return Math.max(0, Math.min(100, pts))
   })
-
   let score = Math.round(objectScores.reduce((a, b) => a + b, 0) / objects.length)
   if (hasHousehold) score = Math.min(100, score + 5)
-
   const actions: { text: string; href: string; points: number }[] = []
   const noDoc = objects.filter(o => !docCounts[o.id]).length
   if (noDoc > 0) actions.push({ text: `Scanner ${noDoc} facture${noDoc > 1 ? 's' : ''} manquante${noDoc > 1 ? 's' : ''}`, href: '/scan', points: 25 })
@@ -73,16 +61,13 @@ function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, nu
   const noSerial = objects.filter(o => !o.serial_number).length
   if (noSerial > 0) actions.push({ text: `Ajouter ${noSerial} numéro${noSerial > 1 ? 's' : ''} de série`, href: '/objects', points: 15 })
   if (!hasHousehold) actions.push({ text: 'Créer un foyer familial', href: '/household', points: 5 })
-
   const level = score >= 90 ? 'Expert FixPass 🏆' : score >= 70 ? 'Avancé 🌟' : score >= 40 ? 'En progression 📈' : 'Débutant 🌱'
   return { score, actions: actions.slice(0, 3), level }
 }
 
-// Composant Onboarding
 function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem[], hasHousehold: boolean, userId: string }) {
   const [dismissed, setDismissed] = useState(false)
   const [visitedSinistre, setVisitedSinistre] = useState(false)
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     const d = localStorage.getItem(`fixpass_onboarding_done_${userId}`)
@@ -90,31 +75,19 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
     const s = localStorage.getItem(`fixpass_visited_sinistre_${userId}`)
     if (s === 'true') setVisitedSinistre(true)
   }, [userId])
-
   const steps = [
-    { id: 'scan', icon: '📄', title: 'Scanner votre première facture', desc: 'Importez une photo ou un PDF — l\'IA extrait tout automatiquement', href: '/scan', done: objects.length > 0 },
+    { id: 'scan', icon: '📄', title: 'Scanner votre première facture', desc: "Importez une photo ou un PDF — l'IA extrait tout automatiquement", href: '/scan', done: objects.length > 0 },
     { id: 'dashboard', icon: '📊', title: 'Découvrir votre patrimoine', desc: 'Valeur de revente, garanties, dépréciation — tout est ici', href: null, done: true },
     { id: 'sinistre', icon: '🚨', title: 'Préparer votre dossier sinistre', desc: 'En cas de vol ou sinistre, générez un PDF avec QR codes en 30 secondes', href: '/sinistre', done: visitedSinistre },
     { id: 'household', icon: '🏠', title: 'Inviter votre famille', desc: 'Regroupez les objets de tout le foyer en un seul coffre', href: '/household', done: hasHousehold },
   ]
-
   const completedCount = steps.filter(s => s.done).length
   const allDone = completedCount === steps.length
-
-  const handleDismiss = () => {
-    localStorage.setItem(`fixpass_onboarding_done_${userId}`, 'true')
-    setDismissed(true)
-  }
-
+  const handleDismiss = () => { localStorage.setItem(`fixpass_onboarding_done_${userId}`, 'true'); setDismissed(true) }
   const handleStepClick = (stepId: string) => {
-    if (stepId === 'sinistre') {
-      localStorage.setItem(`fixpass_visited_sinistre_${userId}`, 'true')
-      setVisitedSinistre(true)
-    }
+    if (stepId === 'sinistre') { localStorage.setItem(`fixpass_visited_sinistre_${userId}`, 'true'); setVisitedSinistre(true) }
   }
-
   if (dismissed) return null
-
   return (
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#F0FBF6' }}>
@@ -123,9 +96,7 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
           <p className="text-xs text-gray-500 mt-0.5">{allDone ? 'Vous maîtrisez toutes les fonctionnalités' : `${completedCount}/${steps.length} étapes complétées`}</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-16 bg-gray-200 rounded-full h-1.5">
-            <div className="h-1.5 rounded-full transition-all" style={{ width: `${(completedCount / steps.length) * 100}%`, background: '#1D9E75' }} />
-          </div>
+          <div className="w-16 bg-gray-200 rounded-full h-1.5"><div className="h-1.5 rounded-full transition-all" style={{ width: `${(completedCount / steps.length) * 100}%`, background: '#1D9E75' }} /></div>
           <button onClick={handleDismiss} className="text-gray-400 hover:text-gray-600 p-1"><X size={14} /></button>
         </div>
       </div>
@@ -170,19 +141,12 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   const sorted = [...objects].filter(o => o.purchase_date && o.purchase_price).sort((a, b) => new Date(a.purchase_date!).getTime() - new Date(b.purchase_date!).getTime())
   if (sorted.length < 2) return <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Pas assez de données pour afficher le graphique</div>
-
   let cumAchat = 0, cumRevente = 0
-  const points = sorted.map(o => {
-    cumAchat += o.purchase_price || 0
-    cumRevente += o.resale_recommended || (o.purchase_price! * 0.6)
-    return { date: new Date(o.purchase_date!), achat: cumAchat, revente: cumRevente }
-  })
-
+  const points = sorted.map(o => { cumAchat += o.purchase_price || 0; cumRevente += o.resale_recommended || (o.purchase_price! * 0.6); return { date: new Date(o.purchase_date!), achat: cumAchat, revente: cumRevente } })
   const maxVal = Math.max(...points.map(p => p.achat))
   const W = 340, H = 140
   const PAD = { top: 10, right: 10, bottom: 30, left: 50 }
-  const chartW = W - PAD.left - PAD.right
-  const chartH = H - PAD.top - PAD.bottom
+  const chartW = W - PAD.left - PAD.right, chartH = H - PAD.top - PAD.bottom
   const xPos = (i: number) => PAD.left + (i / (points.length - 1)) * chartW
   const yPos = (val: number) => PAD.top + chartH - (val / (maxVal || 1)) * chartH
   const achatPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(p.achat)}`).join(' ')
@@ -190,7 +154,6 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   const achatArea = `${achatPath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
   const reventeArea = `${reventePath} L ${xPos(points.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
   const yLabels = [0, 0.5, 1].map(t => ({ val: t * maxVal, y: PAD.top + chartH - t * chartH }))
-
   return (
     <div>
       <div className="flex items-center gap-4 mb-3">
@@ -202,12 +165,7 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
           <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1D9E75" stopOpacity="0.15" /><stop offset="100%" stopColor="#1D9E75" stopOpacity="0" /></linearGradient>
           <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#F97316" stopOpacity="0.1" /><stop offset="100%" stopColor="#F97316" stopOpacity="0" /></linearGradient>
         </defs>
-        {yLabels.map((l, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={l.y} x2={W - PAD.right} y2={l.y} stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4,4" />
-            <text x={PAD.left - 6} y={l.y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF">{l.val >= 1000 ? `${Math.round(l.val / 1000)}k` : Math.round(l.val)}</text>
-          </g>
-        ))}
+        {yLabels.map((l, i) => (<g key={i}><line x1={PAD.left} y1={l.y} x2={W - PAD.right} y2={l.y} stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4,4" /><text x={PAD.left - 6} y={l.y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF">{l.val >= 1000 ? `${Math.round(l.val / 1000)}k` : Math.round(l.val)}</text></g>))}
         <path d={achatArea} fill="url(#ag)" /><path d={reventeArea} fill="url(#rg)" />
         <path d={achatPath} fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <path d={reventePath} fill="none" stroke="#F97316" strokeWidth="1.5" strokeDasharray="5,3" strokeLinecap="round" strokeLinejoin="round" />
@@ -229,7 +187,6 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
   const maxDays = 365
   const getColor = (days: number) => days <= 30 ? { bar: '#E24B4A', text: '#E24B4A' } : days <= 90 ? { bar: '#EF9F27', text: '#BA7517' } : { bar: '#1D9E75', text: '#1D9E75' }
   if (withWarranty.length === 0) return null
-
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-4">
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Garanties</p>
@@ -323,10 +280,7 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
+  const handleLogout = async () => { await supabase.auth.signOut(); router.push('/') }
 
   const doRecalculate = async () => {
     setShowConfirmModal(false)
@@ -343,6 +297,7 @@ export default function DashboardPage() {
             category: o.category, purchase_date: o.purchase_date,
             condition: o.condition, repairs: [],
             is_second_hand: (o as any).is_second_hand || false,
+            purchase_type: (o as any).purchase_type || 'new',
             purchase_price: o.purchase_price,
           }),
         })
@@ -381,15 +336,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
-      {/* Modale confirmation */}
-      {showConfirmModal && (
-        <ConfirmModal
-          count={objects.length}
-          onConfirm={doRecalculate}
-          onCancel={() => setShowConfirmModal(false)}
-        />
-      )}
+      {showConfirmModal && <ConfirmModal count={objects.length} onConfirm={doRecalculate} onCancel={() => setShowConfirmModal(false)} />}
 
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
@@ -401,24 +348,13 @@ export default function DashboardPage() {
           <span className="font-semibold text-gray-900">FixPass</span>
         </div>
         <div className="relative" ref={menuRef}>
-          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors">
-            {userInitials}
-          </button>
+          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors">{userInitials}</button>
           {showMenu && (
             <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-lg z-50 overflow-hidden w-52">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-900 truncate">{userName}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Mon compte</p>
-              </div>
-              <Link href="/profile" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
-                <User size={15} className="text-gray-400" />Mon profil
-              </Link>
-              <Link href="/sinistre" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
-                <AlertTriangle size={15} className="text-red-400" />Mode sinistre
-              </Link>
-              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                <LogOut size={15} />Se déconnecter
-              </button>
+              <div className="px-4 py-3 border-b border-gray-100"><p className="text-xs font-semibold text-gray-900 truncate">{userName}</p><p className="text-xs text-gray-400 mt-0.5">Mon compte</p></div>
+              <Link href="/profile" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors"><User size={15} className="text-gray-400" />Mon profil</Link>
+              <Link href="/sinistre" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors"><AlertTriangle size={15} className="text-red-400" />Mode sinistre</Link>
+              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors"><LogOut size={15} />Se déconnecter</button>
             </div>
           )}
         </div>
@@ -461,7 +397,7 @@ export default function DashboardPage() {
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
             <p className="text-teal-100 text-xs">Valeur de revente estimée</p>
-            <div className="flex items-center gap-1 text-teal-100 text-xs"><TrendingUp size={12} /><span>{showChart ? 'Fermer' : 'Voir l\'évolution'}</span></div>
+            <div className="flex items-center gap-1 text-teal-100 text-xs"><TrendingUp size={12} /><span>{showChart ? 'Fermer' : "Voir l'évolution"}</span></div>
           </div>
           <p className="text-white text-4xl font-semibold">{totalResale > 0 ? formatPrice(totalResale) : formatPrice(totalValue)}</p>
           <div className="flex items-center justify-between mt-1.5">
@@ -480,64 +416,33 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
-            <p className="text-xs text-gray-400 mb-1.5">Garanties</p>
-            <p className="text-2xl font-semibold text-gray-900">{activeWarranties}</p>
-            {expiringWarranties.length > 0 && <p className="text-xs mt-1" style={{ color: '#BA7517' }}>{expiringWarranties.length} expirent bientôt</p>}
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
-            <p className="text-xs text-gray-400 mb-1.5">Objets</p>
-            <p className="text-2xl font-semibold text-gray-900">{objects.length}</p>
-            <p className="text-xs text-gray-400 mt-1">enregistrés</p>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
-            <p className="text-xs text-gray-400 mb-1.5">Investi</p>
-            <p className="text-lg font-semibold text-gray-900">{formatPrice(totalValue)}</p>
-            <p className="text-xs text-gray-400 mt-1">au total</p>
-          </div>
+          <div className="bg-white border border-gray-100 rounded-2xl p-3.5"><p className="text-xs text-gray-400 mb-1.5">Garanties</p><p className="text-2xl font-semibold text-gray-900">{activeWarranties}</p>{expiringWarranties.length > 0 && <p className="text-xs mt-1" style={{ color: '#BA7517' }}>{expiringWarranties.length} expirent bientôt</p>}</div>
+          <div className="bg-white border border-gray-100 rounded-2xl p-3.5"><p className="text-xs text-gray-400 mb-1.5">Objets</p><p className="text-2xl font-semibold text-gray-900">{objects.length}</p><p className="text-xs text-gray-400 mt-1">enregistrés</p></div>
+          <div className="bg-white border border-gray-100 rounded-2xl p-3.5"><p className="text-xs text-gray-400 mb-1.5">Investi</p><p className="text-lg font-semibold text-gray-900">{formatPrice(totalValue)}</p><p className="text-xs text-gray-400 mt-1">au total</p></div>
         </div>
 
-        <Link href="/scan" className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors">
-          <ScanLine size={20} />Scanner une facture
-        </Link>
-
-        <Link href="/sinistre" className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
-          <span style={{ fontSize: 16 }}>🚨</span>Mode sinistre — Dossier assurance
-        </Link>
+        <Link href="/scan" className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors"><ScanLine size={20} />Scanner une facture</Link>
+        <Link href="/sinistre" className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors"><span style={{ fontSize: 16 }}>🚨</span>Mode sinistre — Dossier assurance</Link>
 
         {recalculating ? (
           <div className="bg-white border border-gray-100 rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-900">Recalcul en cours...</p>
-              <p className="text-xs text-teal-600 font-medium">{recalcProgress.done}/{recalcProgress.total}</p>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div className="h-2 rounded-full bg-teal-400 transition-all" style={{ width: `${(recalcProgress.done / recalcProgress.total) * 100}%` }} />
-            </div>
+            <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-900">Recalcul en cours...</p><p className="text-xs text-teal-600 font-medium">{recalcProgress.done}/{recalcProgress.total}</p></div>
+            <div className="w-full bg-gray-100 rounded-full h-2"><div className="h-2 rounded-full bg-teal-400 transition-all" style={{ width: `${(recalcProgress.done / recalcProgress.total) * 100}%` }} /></div>
             <p className="text-xs text-gray-400 mt-2">L'IA analyse le marché pour chaque objet...</p>
           </div>
         ) : (
-          <button onClick={() => setShowConfirmModal(true)}
-            className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors">
-            <RefreshCw size={15} />Recalculer toutes les estimations via IA
-          </button>
+          <button onClick={() => setShowConfirmModal(true)} className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors"><RefreshCw size={15} />Recalculer toutes les estimations via IA</button>
         )}
 
         <WarrantyCard objects={objects} />
 
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              {Object.keys(memberNames).length > 0 ? 'Objets du foyer' : 'Mes objets'} {objects.length > 0 && `(${objects.length})`}
-            </h2>
+            <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">{Object.keys(memberNames).length > 0 ? 'Objets du foyer' : 'Mes objets'} {objects.length > 0 && `(${objects.length})`}</h2>
             <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline"><Plus size={14} /> Ajouter</Link>
           </div>
           {objects.length === 0 ? (
-            <div className="bg-white border border-gray-100 rounded-2xl text-center py-14">
-              <div className="text-4xl mb-3">📦</div>
-              <p className="text-gray-500 text-sm">Aucun objet encore.</p>
-              <p className="text-gray-400 text-sm mt-1">Scannez votre première facture !</p>
-            </div>
+            <div className="bg-white border border-gray-100 rounded-2xl text-center py-14"><div className="text-4xl mb-3">📦</div><p className="text-gray-500 text-sm">Aucun objet encore.</p><p className="text-gray-400 text-sm mt-1">Scannez votre première facture !</p></div>
           ) : (
             <div className="space-y-2">
               {objects.slice(0, 10).map(o => {
@@ -555,9 +460,7 @@ export default function DashboardPage() {
                   </Link>
                 )
               })}
-              {objects.length > 10 && (
-                <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">Voir tous les objets ({objects.length})</Link>
-              )}
+              {objects.length > 10 && <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">Voir tous les objets ({objects.length})</Link>}
             </div>
           )}
         </div>
