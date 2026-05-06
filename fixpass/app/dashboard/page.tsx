@@ -12,6 +12,41 @@ import { ScanLine, Plus, LogOut, TrendingUp, X, User, AlertTriangle, RefreshCw, 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Modale de confirmation personnalisée
+function ConfirmModal({ count, onConfirm, onCancel }: { count: number, onConfirm: () => void, onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-8" style={{ background: 'rgba(0,0,0,0.4)' }}>
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl">
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <RefreshCw size={18} className="text-teal-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">Recalculer les estimations</p>
+              <p className="text-xs text-gray-400 mt-0.5">{count} objet{count > 1 ? 's' : ''} concerné{count > 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed">
+            L'IA va analyser le marché français pour chaque objet et mettre à jour les prix de revente. Cette opération peut prendre quelques minutes.
+          </p>
+        </div>
+        <div className="flex border-t border-gray-100">
+          <button onClick={onCancel}
+            className="flex-1 py-4 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors border-r border-gray-100">
+            Annuler
+          </button>
+          <button onClick={onConfirm}
+            className="flex-1 py-4 text-sm font-semibold transition-colors"
+            style={{ color: '#1D9E75' }}>
+            Lancer le recalcul
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Calcul du Score FixPass
 function computeFixPassScore(objects: ObjectItem[], docCounts: Record<string, number>, hasHousehold: boolean) {
   if (objects.length === 0) return { score: 0, actions: [], level: 'Débutant' }
@@ -57,38 +92,10 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
   }, [userId])
 
   const steps = [
-    {
-      id: 'scan',
-      icon: '📄',
-      title: 'Scanner votre première facture',
-      desc: 'Importez une photo ou un PDF — l\'IA extrait tout automatiquement',
-      href: '/scan',
-      done: objects.length > 0,
-    },
-    {
-      id: 'dashboard',
-      icon: '📊',
-      title: 'Découvrir votre patrimoine',
-      desc: 'Valeur de revente, garanties, dépréciation — tout est ici',
-      href: null,
-      done: true,
-    },
-    {
-      id: 'sinistre',
-      icon: '🚨',
-      title: 'Préparer votre dossier sinistre',
-      desc: 'En cas de vol ou sinistre, générez un PDF avec QR codes en 30 secondes',
-      href: '/sinistre',
-      done: visitedSinistre,
-    },
-    {
-      id: 'household',
-      icon: '🏠',
-      title: 'Inviter votre famille',
-      desc: 'Regroupez les objets de tout le foyer en un seul coffre',
-      href: '/household',
-      done: hasHousehold,
-    },
+    { id: 'scan', icon: '📄', title: 'Scanner votre première facture', desc: 'Importez une photo ou un PDF — l\'IA extrait tout automatiquement', href: '/scan', done: objects.length > 0 },
+    { id: 'dashboard', icon: '📊', title: 'Découvrir votre patrimoine', desc: 'Valeur de revente, garanties, dépréciation — tout est ici', href: null, done: true },
+    { id: 'sinistre', icon: '🚨', title: 'Préparer votre dossier sinistre', desc: 'En cas de vol ou sinistre, générez un PDF avec QR codes en 30 secondes', href: '/sinistre', done: visitedSinistre },
+    { id: 'household', icon: '🏠', title: 'Inviter votre famille', desc: 'Regroupez les objets de tout le foyer en un seul coffre', href: '/household', done: hasHousehold },
   ]
 
   const completedCount = steps.filter(s => s.done).length
@@ -112,29 +119,21 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
     <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between" style={{ background: '#F0FBF6' }}>
         <div>
-          <p className="text-sm font-semibold text-gray-900">
-            {allDone ? '🏆 Coffre prêt !' : '🚀 Découvrez FixPass'}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {allDone ? 'Vous maîtrisez toutes les fonctionnalités' : `${completedCount}/${steps.length} étapes complétées`}
-          </p>
+          <p className="text-sm font-semibold text-gray-900">{allDone ? '🏆 Coffre prêt !' : '🚀 Découvrez FixPass'}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{allDone ? 'Vous maîtrisez toutes les fonctionnalités' : `${completedCount}/${steps.length} étapes complétées`}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-16 bg-gray-200 rounded-full h-1.5">
             <div className="h-1.5 rounded-full transition-all" style={{ width: `${(completedCount / steps.length) * 100}%`, background: '#1D9E75' }} />
           </div>
-          <button onClick={handleDismiss} className="text-gray-400 hover:text-gray-600 p-1">
-            <X size={14} />
-          </button>
+          <button onClick={handleDismiss} className="text-gray-400 hover:text-gray-600 p-1"><X size={14} /></button>
         </div>
       </div>
-
       <div className="divide-y divide-gray-50">
         {steps.map(step => (
           <div key={step.id}>
             {step.href && !step.done ? (
-              <Link href={step.href} onClick={() => handleStepClick(step.id)}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+              <Link href={step.href} onClick={() => handleStepClick(step.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
                 <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${step.done ? 'border-teal-400 bg-teal-400' : 'border-gray-300'}`}>
                   {step.done ? <Check size={12} className="text-white" /> : <span className="text-sm">{step.icon}</span>}
                 </div>
@@ -158,7 +157,6 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
           </div>
         ))}
       </div>
-
       {allDone && (
         <div className="px-4 py-3 border-t border-gray-50 flex items-center justify-between">
           <p className="text-xs text-gray-400">Vous pouvez masquer cette carte</p>
@@ -170,16 +168,10 @@ function OnboardingCard({ objects, hasHousehold, userId }: { objects: ObjectItem
 }
 
 function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
-  const sorted = [...objects]
-    .filter(o => o.purchase_date && o.purchase_price)
-    .sort((a, b) => new Date(a.purchase_date!).getTime() - new Date(b.purchase_date!).getTime())
+  const sorted = [...objects].filter(o => o.purchase_date && o.purchase_price).sort((a, b) => new Date(a.purchase_date!).getTime() - new Date(b.purchase_date!).getTime())
+  if (sorted.length < 2) return <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Pas assez de données pour afficher le graphique</div>
 
-  if (sorted.length < 2) {
-    return <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Pas assez de données pour afficher le graphique</div>
-  }
-
-  let cumAchat = 0
-  let cumRevente = 0
+  let cumAchat = 0, cumRevente = 0
   const points = sorted.map(o => {
     cumAchat += o.purchase_price || 0
     cumRevente += o.resale_recommended || (o.purchase_price! * 0.6)
@@ -202,96 +194,48 @@ function PatrimoineChart({ objects }: { objects: ObjectItem[] }) {
   return (
     <div>
       <div className="flex items-center gap-4 mb-3">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-0.5 rounded" style={{ background: '#1D9E75' }}></div>
-          <span className="text-xs text-gray-500">Prix d'achat cumulé</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-0.5 rounded" style={{ background: '#F97316' }}></div>
-          <span className="text-xs text-gray-500">Valeur de revente</span>
-        </div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded" style={{ background: '#1D9E75' }}></div><span className="text-xs text-gray-500">Prix d'achat cumulé</span></div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded" style={{ background: '#F97316' }}></div><span className="text-xs text-gray-500">Valeur de revente</span></div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
         <defs>
-          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1D9E75" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#1D9E75" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#F97316" stopOpacity="0.1" />
-            <stop offset="100%" stopColor="#F97316" stopOpacity="0" />
-          </linearGradient>
+          <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1D9E75" stopOpacity="0.15" /><stop offset="100%" stopColor="#1D9E75" stopOpacity="0" /></linearGradient>
+          <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#F97316" stopOpacity="0.1" /><stop offset="100%" stopColor="#F97316" stopOpacity="0" /></linearGradient>
         </defs>
         {yLabels.map((l, i) => (
           <g key={i}>
             <line x1={PAD.left} y1={l.y} x2={W - PAD.right} y2={l.y} stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4,4" />
-            <text x={PAD.left - 6} y={l.y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF">
-              {l.val >= 1000 ? `${Math.round(l.val / 1000)}k` : Math.round(l.val)}
-            </text>
+            <text x={PAD.left - 6} y={l.y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF">{l.val >= 1000 ? `${Math.round(l.val / 1000)}k` : Math.round(l.val)}</text>
           </g>
         ))}
-        <path d={achatArea} fill="url(#ag)" />
-        <path d={reventeArea} fill="url(#rg)" />
+        <path d={achatArea} fill="url(#ag)" /><path d={reventeArea} fill="url(#rg)" />
         <path d={achatPath} fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <path d={reventePath} fill="none" stroke="#F97316" strokeWidth="1.5" strokeDasharray="5,3" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((p, i) => (
-          <g key={i}>
-            <circle cx={xPos(i)} cy={yPos(p.achat)} r="3" fill="#1D9E75" />
-            <circle cx={xPos(i)} cy={yPos(p.revente)} r="2.5" fill="#F97316" />
-          </g>
-        ))}
-        {[0, points.length - 1].map(i => (
-          <text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="#9CA3AF">
-            {points[i].date.getFullYear()}
-          </text>
-        ))}
+        {points.map((p, i) => (<g key={i}><circle cx={xPos(i)} cy={yPos(p.achat)} r="3" fill="#1D9E75" /><circle cx={xPos(i)} cy={yPos(p.revente)} r="2.5" fill="#F97316" /></g>))}
+        {[0, points.length - 1].map(i => (<text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="#9CA3AF">{points[i].date.getFullYear()}</text>))}
       </svg>
       <div className="flex justify-between mt-3 pt-3 border-t border-gray-100">
-        <div>
-          <p className="text-xs text-gray-400">Investi au total</p>
-          <p className="text-sm font-semibold" style={{ color: '#1D9E75' }}>{formatPrice(points[points.length - 1]?.achat)}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-gray-400">Valeur de revente</p>
-          <p className="text-sm font-semibold" style={{ color: '#F97316' }}>{formatPrice(points[points.length - 1]?.revente)}</p>
-        </div>
+        <div><p className="text-xs text-gray-400">Investi au total</p><p className="text-sm font-semibold" style={{ color: '#1D9E75' }}>{formatPrice(points[points.length - 1]?.achat)}</p></div>
+        <div className="text-right"><p className="text-xs text-gray-400">Valeur de revente</p><p className="text-sm font-semibold" style={{ color: '#F97316' }}>{formatPrice(points[points.length - 1]?.revente)}</p></div>
       </div>
     </div>
   )
 }
 
 function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
-  const withWarranty = objects
-    .filter(o => o.warranty_end_date && o.warranty_status !== 'expired')
-    .map(o => ({ ...o, days: daysUntilExpiry(o.warranty_end_date) }))
-    .filter(o => o.days !== null && o.days > 0)
-    .sort((a, b) => (a.days ?? 999) - (b.days ?? 999))
-    .slice(0, 6)
-
+  const withWarranty = objects.filter(o => o.warranty_end_date && o.warranty_status !== 'expired').map(o => ({ ...o, days: daysUntilExpiry(o.warranty_end_date) })).filter(o => o.days !== null && o.days > 0).sort((a, b) => (a.days ?? 999) - (b.days ?? 999)).slice(0, 6)
   const active = objects.filter(o => o.warranty_status === 'active').length
   const expiring = objects.filter(o => o.warranty_status === 'expiring_soon').length
   const maxDays = 365
-
-  const getColor = (days: number) => {
-    if (days <= 30) return { bar: '#E24B4A', text: '#E24B4A' }
-    if (days <= 90) return { bar: '#EF9F27', text: '#BA7517' }
-    return { bar: '#1D9E75', text: '#1D9E75' }
-  }
-
+  const getColor = (days: number) => days <= 30 ? { bar: '#E24B4A', text: '#E24B4A' } : days <= 90 ? { bar: '#EF9F27', text: '#BA7517' } : { bar: '#1D9E75', text: '#1D9E75' }
   if (withWarranty.length === 0) return null
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-4">
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Garanties</p>
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-2xl font-semibold" style={{ color: '#1D9E75' }}>{active}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Actives</p>
-        </div>
-        <div className="bg-gray-50 rounded-xl p-3">
-          <p className="text-2xl font-semibold" style={{ color: expiring > 0 ? '#BA7517' : '#9CA3AF' }}>{expiring}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Expirent bientôt</p>
-        </div>
+        <div className="bg-gray-50 rounded-xl p-3"><p className="text-2xl font-semibold" style={{ color: '#1D9E75' }}>{active}</p><p className="text-xs text-gray-400 mt-0.5">Actives</p></div>
+        <div className="bg-gray-50 rounded-xl p-3"><p className="text-2xl font-semibold" style={{ color: expiring > 0 ? '#BA7517' : '#9CA3AF' }}>{expiring}</p><p className="text-xs text-gray-400 mt-0.5">Expirent bientôt</p></div>
       </div>
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Prochaines expirations</p>
       <div className="space-y-2.5">
@@ -303,9 +247,7 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
             <Link href={`/objects/${o.id}`} key={o.id} className="block">
               <div className="flex items-center gap-2.5">
                 <span className="text-xs text-gray-500 truncate" style={{ width: 110, flexShrink: 0 }}>{o.name}</span>
-                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: colors.bar }} />
-                </div>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden"><div className="h-1.5 rounded-full transition-all" style={{ width: `${pct}%`, background: colors.bar }} /></div>
                 <span className="text-xs font-medium w-10 text-right flex-shrink-0" style={{ color: colors.text }}>{days} j</span>
               </div>
             </Link>
@@ -313,15 +255,8 @@ function WarrantyCard({ objects }: { objects: ObjectItem[] }) {
         })}
       </div>
       <div className="flex gap-4 mt-3 pt-3 border-t border-gray-100">
-        {[
-          { color: '#E24B4A', label: 'Urgent (<30j)' },
-          { color: '#EF9F27', label: 'Bientôt (<90j)' },
-          { color: '#1D9E75', label: 'Active' },
-        ].map(l => (
-          <div key={l.label} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }}></div>
-            <span className="text-xs text-gray-400">{l.label}</span>
-          </div>
+        {[{ color: '#E24B4A', label: 'Urgent (<30j)' }, { color: '#EF9F27', label: 'Bientôt (<90j)' }, { color: '#1D9E75', label: 'Active' }].map(l => (
+          <div key={l.label} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }}></div><span className="text-xs text-gray-400">{l.label}</span></div>
         ))}
       </div>
     </div>
@@ -339,6 +274,7 @@ export default function DashboardPage() {
   const [showChart, setShowChart] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showScoreDetails, setShowScoreDetails] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [memberNames, setMemberNames] = useState<Record<string, string>>({})
   const [hasHousehold, setHasHousehold] = useState(false)
   const [docCounts, setDocCounts] = useState<Record<string, number>>({})
@@ -354,18 +290,14 @@ export default function DashboardPage() {
       setUserName(name)
       setUserInitials(name.slice(0, 2).toUpperCase())
       setUserId(user.id)
-
       const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
       setObjects(data || [])
-
       const { data: docs } = await supabase.from('documents').select('object_id')
       const counts: Record<string, number> = {}
       docs?.forEach(d => { counts[d.object_id] = (counts[d.object_id] || 0) + 1 })
       setDocCounts(counts)
-
       const { data: householdData } = await supabase.from('households').select('id').eq('owner_id', user.id).single()
       setHasHousehold(!!householdData)
-
       if (householdData) {
         const { data: members } = await supabase.from('household_members').select('user_id').eq('household_id', householdData.id).neq('user_id', user.id)
         if (members && members.length > 0) {
@@ -396,11 +328,10 @@ export default function DashboardPage() {
     router.push('/')
   }
 
-  const recalculateAllEstimates = async () => {
-    if (!confirm(`Recalculer les estimations de revente pour ${objects.length} objets via l'IA ? Cela peut prendre quelques minutes.`)) return
+  const doRecalculate = async () => {
+    setShowConfirmModal(false)
     setRecalculating(true)
     setRecalcProgress({ done: 0, total: objects.length })
-
     for (let i = 0; i < objects.length; i++) {
       const o = objects[i]
       try {
@@ -417,16 +348,11 @@ export default function DashboardPage() {
         })
         const data = await res.json()
         if (data.resale_recommended) {
-          await supabase.from('objects').update({
-            resale_min: data.resale_min,
-            resale_max: data.resale_max,
-            resale_recommended: data.resale_recommended,
-          }).eq('id', o.id)
+          await supabase.from('objects').update({ resale_min: data.resale_min, resale_max: data.resale_max, resale_recommended: data.resale_recommended }).eq('id', o.id)
         }
       } catch {}
       setRecalcProgress({ done: i + 1, total: objects.length })
     }
-
     const { data } = await supabase.from('objects').select('*').order('created_at', { ascending: false })
     setObjects(data || [])
     setRecalculating(false)
@@ -437,10 +363,7 @@ export default function DashboardPage() {
   const totalResale = objects.reduce((sum, o) => sum + (o.resale_recommended || 0), 0)
   const activeWarranties = objects.filter(o => o.warranty_status === 'active').length
   const expiringWarranties = objects.filter(o => o.warranty_status === 'expiring_soon')
-  const depreciation = totalValue > 0 && totalResale > 0
-    ? Math.round(((totalValue - totalResale) / totalValue) * 100)
-    : null
-
+  const depreciation = totalValue > 0 && totalResale > 0 ? Math.round(((totalValue - totalResale) / totalValue) * 100) : null
   const { score, actions, level } = computeFixPassScore(objects, docCounts, hasHousehold)
   const scoreColor = score >= 70 ? '#1D9E75' : score >= 40 ? '#EF9F27' : '#E24B4A'
   const scoreBg = score >= 70 ? 'bg-green-50 border-green-200' : score >= 40 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
@@ -458,6 +381,16 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+
+      {/* Modale confirmation */}
+      {showConfirmModal && (
+        <ConfirmModal
+          count={objects.length}
+          onConfirm={doRecalculate}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      )}
+
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
@@ -467,10 +400,8 @@ export default function DashboardPage() {
           </svg>
           <span className="font-semibold text-gray-900">FixPass</span>
         </div>
-
         <div className="relative" ref={menuRef}>
-          <button onClick={() => setShowMenu(!showMenu)}
-            className="w-8 h-8 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors">
+          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 bg-teal-50 rounded-full flex items-center justify-center text-teal-700 text-xs font-semibold hover:bg-teal-100 transition-colors">
             {userInitials}
           </button>
           {showMenu && (
@@ -479,20 +410,14 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-gray-900 truncate">{userName}</p>
                 <p className="text-xs text-gray-400 mt-0.5">Mon compte</p>
               </div>
-              <Link href="/profile" onClick={() => setShowMenu(false)}
-                className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
-                <User size={15} className="text-gray-400" />
-                Mon profil
+              <Link href="/profile" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
+                <User size={15} className="text-gray-400" />Mon profil
               </Link>
-              <Link href="/sinistre" onClick={() => setShowMenu(false)}
-                className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
-                <AlertTriangle size={15} className="text-red-400" />
-                Mode sinistre
+              <Link href="/sinistre" onClick={() => setShowMenu(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 border-b border-gray-100 transition-colors">
+                <AlertTriangle size={15} className="text-red-400" />Mode sinistre
               </Link>
-              <button onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                <LogOut size={15} />
-                Se déconnecter
+              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                <LogOut size={15} />Se déconnecter
               </button>
             </div>
           )}
@@ -500,55 +425,34 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-24">
-
         <div>
           <p className="text-gray-500 text-sm">Bonjour, {userName} 👋</p>
-          <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">
-            {Object.keys(memberNames).length > 0 ? 'Coffre du foyer' : 'Votre coffre'}
-          </h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mt-0.5">{Object.keys(memberNames).length > 0 ? 'Coffre du foyer' : 'Votre coffre'}</h1>
         </div>
 
-        {userId && (
-          <OnboardingCard objects={objects} hasHousehold={hasHousehold} userId={userId} />
-        )}
+        {userId && <OnboardingCard objects={objects} hasHousehold={hasHousehold} userId={userId} />}
 
         {objects.length > 0 && (
-          <button onClick={() => setShowScoreDetails(!showScoreDetails)}
-            className={`w-full border rounded-2xl p-4 text-left transition-colors ${scoreBg}`}>
+          <button onClick={() => setShowScoreDetails(!showScoreDetails)} className={`w-full border rounded-2xl p-4 text-left transition-colors ${scoreBg}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                  style={{ background: scoreColor }}>
-                  {score}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Score FixPass</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{level}</p>
-                </div>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ background: scoreColor }}>{score}</div>
+                <div><p className="text-sm font-semibold text-gray-900">Score FixPass</p><p className="text-xs text-gray-500 mt-0.5">{level}</p></div>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, background: scoreColor }} />
-                </div>
+                <div className="w-24 bg-gray-200 rounded-full h-2"><div className="h-2 rounded-full transition-all" style={{ width: `${score}%`, background: scoreColor }} /></div>
                 {showScoreDetails ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
               </div>
             </div>
-
             {showScoreDetails && (
               <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Actions pour améliorer votre score</p>
                 {actions.length > 0 ? actions.map((action, i) => (
-                  <Link key={i} href={action.href} onClick={e => e.stopPropagation()}
-                    className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                  <Link key={i} href={action.href} onClick={e => e.stopPropagation()} className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 hover:bg-gray-50 transition-colors">
                     <span className="text-sm text-gray-700">{action.text}</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white flex-shrink-0 ml-2"
-                      style={{ background: scoreColor }}>
-                      +{action.points} pts
-                    </span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white flex-shrink-0 ml-2" style={{ background: scoreColor }}>+{action.points} pts</span>
                   </Link>
-                )) : (
-                  <p className="text-sm text-gray-500 text-center py-2">🏆 Score parfait ! Continuez comme ça.</p>
-                )}
+                )) : <p className="text-sm text-gray-500 text-center py-2">🏆 Score parfait ! Continuez comme ça.</p>}
               </div>
             )}
           </button>
@@ -557,21 +461,12 @@ export default function DashboardPage() {
         <div className="bg-teal-400 rounded-2xl p-5 cursor-pointer select-none" onClick={() => setShowChart(!showChart)}>
           <div className="flex items-center justify-between mb-1">
             <p className="text-teal-100 text-xs">Valeur de revente estimée</p>
-            <div className="flex items-center gap-1 text-teal-100 text-xs">
-              <TrendingUp size={12} />
-              <span>{showChart ? 'Fermer' : 'Voir l\'évolution'}</span>
-            </div>
+            <div className="flex items-center gap-1 text-teal-100 text-xs"><TrendingUp size={12} /><span>{showChart ? 'Fermer' : 'Voir l\'évolution'}</span></div>
           </div>
-          <p className="text-white text-4xl font-semibold">
-            {totalResale > 0 ? formatPrice(totalResale) : formatPrice(totalValue)}
-          </p>
+          <p className="text-white text-4xl font-semibold">{totalResale > 0 ? formatPrice(totalResale) : formatPrice(totalValue)}</p>
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-teal-100 text-xs">
-              {objects.length} objet{objects.length > 1 ? 's' : ''} · Acheté {formatPrice(totalValue)}
-            </p>
-            {depreciation !== null && (
-              <p className="text-teal-100 text-xs font-medium">-{depreciation}% dépréciation</p>
-            )}
+            <p className="text-teal-100 text-xs">{objects.length} objet{objects.length > 1 ? 's' : ''} · Acheté {formatPrice(totalValue)}</p>
+            {depreciation !== null && <p className="text-teal-100 text-xs font-medium">-{depreciation}% dépréciation</p>}
           </div>
           {showChart && (
             <div className="mt-4 bg-white rounded-xl p-4" onClick={e => e.stopPropagation()}>
@@ -588,9 +483,7 @@ export default function DashboardPage() {
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
             <p className="text-xs text-gray-400 mb-1.5">Garanties</p>
             <p className="text-2xl font-semibold text-gray-900">{activeWarranties}</p>
-            {expiringWarranties.length > 0 && (
-              <p className="text-xs mt-1" style={{ color: '#BA7517' }}>{expiringWarranties.length} expirent bientôt</p>
-            )}
+            {expiringWarranties.length > 0 && <p className="text-xs mt-1" style={{ color: '#BA7517' }}>{expiringWarranties.length} expirent bientôt</p>}
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5">
             <p className="text-xs text-gray-400 mb-1.5">Objets</p>
@@ -605,13 +498,11 @@ export default function DashboardPage() {
         </div>
 
         <Link href="/scan" className="w-full bg-teal-400 hover:bg-teal-600 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 text-base font-medium transition-colors">
-          <ScanLine size={20} />
-          Scanner une facture
+          <ScanLine size={20} />Scanner une facture
         </Link>
 
         <Link href="/sinistre" className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
-          <span style={{ fontSize: 16 }}>🚨</span>
-          Mode sinistre — Dossier assurance
+          <span style={{ fontSize: 16 }}>🚨</span>Mode sinistre — Dossier assurance
         </Link>
 
         {recalculating ? (
@@ -621,16 +512,14 @@ export default function DashboardPage() {
               <p className="text-xs text-teal-600 font-medium">{recalcProgress.done}/{recalcProgress.total}</p>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-2">
-              <div className="h-2 rounded-full bg-teal-400 transition-all"
-                style={{ width: `${(recalcProgress.done / recalcProgress.total) * 100}%` }} />
+              <div className="h-2 rounded-full bg-teal-400 transition-all" style={{ width: `${(recalcProgress.done / recalcProgress.total) * 100}%` }} />
             </div>
             <p className="text-xs text-gray-400 mt-2">L'IA analyse le marché pour chaque objet...</p>
           </div>
         ) : (
-          <button onClick={recalculateAllEstimates}
+          <button onClick={() => setShowConfirmModal(true)}
             className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium border border-gray-200 text-gray-600 bg-white hover:bg-gray-50 transition-colors">
-            <RefreshCw size={15} />
-            Recalculer toutes les estimations via IA
+            <RefreshCw size={15} />Recalculer toutes les estimations via IA
           </button>
         )}
 
@@ -641,11 +530,8 @@ export default function DashboardPage() {
             <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider">
               {Object.keys(memberNames).length > 0 ? 'Objets du foyer' : 'Mes objets'} {objects.length > 0 && `(${objects.length})`}
             </h2>
-            <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline">
-              <Plus size={14} /> Ajouter
-            </Link>
+            <Link href="/objects/new" className="text-teal-600 text-sm font-medium flex items-center gap-1 hover:underline"><Plus size={14} /> Ajouter</Link>
           </div>
-
           {objects.length === 0 ? (
             <div className="bg-white border border-gray-100 rounded-2xl text-center py-14">
               <div className="text-4xl mb-3">📦</div>
@@ -658,30 +544,19 @@ export default function DashboardPage() {
                 const isOther = o.user_id !== userId
                 const memberName = memberNames[o.user_id]
                 return (
-                  <Link href={`/objects/${o.id}`} key={o.id}
-                    className={`bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 hover:border-gray-200 transition-colors ${isOther ? 'border-teal-100' : 'border-gray-100'}`}>
-                    <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
-                      {getCategoryEmoji(o.category)}
-                    </div>
+                  <Link href={`/objects/${o.id}`} key={o.id} className={`bg-white border rounded-2xl flex items-center gap-3 px-4 py-3.5 hover:border-gray-200 transition-colors ${isOther ? 'border-teal-100' : 'border-gray-100'}`}>
+                    <div className="w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center text-xl flex-shrink-0">{getCategoryEmoji(o.category)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">{o.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}
-                      </p>
-                      {isOther && memberName && (
-                        <p className="text-xs text-teal-600 font-medium mt-0.5">👤 {memberName}</p>
-                      )}
+                      <p className="text-xs text-gray-400 mt-0.5">{[o.brand, o.purchase_price ? formatPrice(o.purchase_price) : null, o.seller].filter(Boolean).join(' · ')}</p>
+                      {isOther && memberName && <p className="text-xs text-teal-600 font-medium mt-0.5">👤 {memberName}</p>}
                     </div>
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${WARRANTY_COLORS[o.warranty_status || 'unknown']}`}>
-                      {WARRANTY_LABELS[o.warranty_status || 'unknown']}
-                    </span>
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0 ${WARRANTY_COLORS[o.warranty_status || 'unknown']}`}>{WARRANTY_LABELS[o.warranty_status || 'unknown']}</span>
                   </Link>
                 )
               })}
               {objects.length > 10 && (
-                <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">
-                  Voir tous les objets ({objects.length})
-                </Link>
+                <Link href="/objects" className="block text-center text-sm text-teal-600 py-2 hover:underline">Voir tous les objets ({objects.length})</Link>
               )}
             </div>
           )}
