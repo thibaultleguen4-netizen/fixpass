@@ -11,6 +11,14 @@ import { ArrowLeft, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+type PurchaseType = 'new' | 'refurbished' | 'second_hand'
+
+const PURCHASE_TYPES = [
+  { value: 'new' as PurchaseType, label: 'Neuf', emoji: '✨', activeColor: 'bg-teal-400 border-teal-400 text-white', desc: '' },
+  { value: 'refurbished' as PurchaseType, label: 'Reconditionné', emoji: '♻️', activeColor: 'bg-blue-500 border-blue-500 text-white', desc: 'Remis à neuf par un professionnel, testé et garanti.' },
+  { value: 'second_hand' as PurchaseType, label: 'Occasion', emoji: '🔄', activeColor: 'bg-orange-400 border-orange-400 text-white', desc: "Acheté à un particulier ou sur une plateforme d'occasion." },
+]
+
 interface ExtractedData {
   product_name: string
   brand: string
@@ -53,9 +61,7 @@ async function convertPdfToImages(file: File): Promise<string[]> {
 
 async function extractFromFile(base64Images: string[], mimeType: string, originalFile: File): Promise<ExtractedData> {
   let images = base64Images
-  if (mimeType === 'application/pdf') {
-    images = await convertPdfToImages(originalFile)
-  }
+  if (mimeType === 'application/pdf') images = await convertPdfToImages(originalFile)
   const res = await fetch(`${SUPABASE_URL}/functions/v1/extract-invoice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
@@ -97,6 +103,15 @@ export default function ScanPage() {
         try {
           const data = await extractFromFile([base64], f.type, f)
           setExtracted(data)
+          const seller = (data.seller || '').toLowerCase()
+          let purchaseType: PurchaseType = 'new'
+          if (data.is_second_hand) {
+            if (seller.includes('back market') || seller.includes('backmarket') || seller.includes('recommerce')) {
+              purchaseType = 'refurbished'
+            } else {
+              purchaseType = 'second_hand'
+            }
+          }
           setForm({
             name: data.product_name || '',
             brand: data.brand || '',
@@ -110,7 +125,7 @@ export default function ScanPage() {
             warranty_months: data.standard_warranty_months?.toString() || '24',
             extended_warranty_months: data.extended_warranty_months?.toString() || '0',
             condition: 'good',
-            is_second_hand: data.is_second_hand || false,
+            purchase_type: purchaseType,
           })
           setStep('confirm')
         } catch (err) {
@@ -137,6 +152,7 @@ export default function ScanPage() {
       : null
 
     const price = form.purchase_price ? parseFloat(form.purchase_price) : null
+    const purchaseType: PurchaseType = form.purchase_type || 'new'
 
     const { data: objData, error } = await supabase.from('objects').insert({
       user_id: user.id,
@@ -155,7 +171,8 @@ export default function ScanPage() {
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition || 'good',
-      is_second_hand: form.is_second_hand || false,
+      purchase_type: purchaseType,
+      is_second_hand: purchaseType === 'second_hand',
       resale_min: null,
       resale_max: null,
       resale_recommended: null,
@@ -170,13 +187,8 @@ export default function ScanPage() {
       if (uploadData) {
         const { data: { publicUrl } } = supabase.storage.from('fixpass-documents').getPublicUrl(path)
         await supabase.from('documents').insert({
-          object_id: objData.id,
-          user_id: user.id,
-          type: 'receipt',
-          file_url: publicUrl,
-          file_name: file.name,
-          mime_type: file.type,
-          extraction_status: 'done',
+          object_id: objData.id, user_id: user.id, type: 'receipt',
+          file_url: publicUrl, file_name: file.name, mime_type: file.type, extraction_status: 'done',
         })
       }
     }
@@ -190,7 +202,7 @@ export default function ScanPage() {
           name: objData.name, brand: objData.brand, model: objData.model,
           category: objData.category, purchase_date: objData.purchase_date,
           condition: objData.condition, repairs: [],
-          is_second_hand: form.is_second_hand || false,
+          purchase_type: purchaseType,
           purchase_price: price,
         }),
       })
@@ -209,6 +221,7 @@ export default function ScanPage() {
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
   const needsConfirm = (field: string) => extracted?.fields_to_confirm?.includes(field)
+  const currentType = PURCHASE_TYPES.find(t => t.value === form.purchase_type) || PURCHASE_TYPES[0]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -223,7 +236,7 @@ export default function ScanPage() {
             <p className="text-gray-500 text-sm">Importez une photo ou un PDF de votre facture. L'IA extrait automatiquement les informations.</p>
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
               <span className="text-sm">⚠️</span>
-              <p className="text-xs text-yellow-700">Pour une estimation correcte, assurez-vous que les prix sur votre facture sont en <strong>euros (€)</strong>. Les factures en devise étrangère (USD, TND, GBP...) peuvent donner des estimations incorrectes.</p>
+              <p className="text-xs text-yellow-700">Pour une estimation correcte, assurez-vous que les prix sur votre facture sont en <strong>euros (€)</strong>. Les factures en devise étrangère peuvent donner des estimations incorrectes.</p>
             </div>
             <label className="block cursor-pointer">
               <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center hover:border-teal-400 hover:bg-teal-50 transition-colors">
@@ -242,9 +255,7 @@ export default function ScanPage() {
           <div className="card text-center py-12">
             <div className="text-4xl mb-4 animate-pulse">🔍</div>
             <p className="font-semibold text-gray-900">Analyse en cours...</p>
-            <p className="text-sm text-gray-500 mt-2">
-              {file?.type === 'application/pdf' ? 'Conversion du PDF, puis analyse IA...' : "L'IA lit votre facture..."}
-            </p>
+            <p className="text-sm text-gray-500 mt-2">{file?.type === 'application/pdf' ? 'Conversion du PDF, puis analyse IA...' : "L'IA lit votre facture..."}</p>
           </div>
         )}
 
@@ -255,12 +266,14 @@ export default function ScanPage() {
               <span className="text-sm text-green-700 font-medium">Analyse terminée — vérifiez les données extraites</span>
             </div>
 
-            {extracted.is_second_hand && (
+            {form.purchase_type !== 'new' && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-2">
-                <span className="text-sm mt-0.5">🔄</span>
+                <span className="text-sm mt-0.5">{currentType.emoji}</span>
                 <div>
-                  <p className="text-sm text-blue-800 font-medium">Achat d'occasion détecté</p>
-                  <p className="text-xs text-blue-600 mt-0.5">L'IA a détecté que cet objet a été acheté d'occasion. L'estimation de revente sera ajustée en conséquence.</p>
+                  <p className="text-sm text-blue-800 font-medium">
+                    {form.purchase_type === 'refurbished' ? 'Achat reconditionné détecté' : "Achat d'occasion détecté"}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-0.5">L'estimation de revente sera ajustée en conséquence.</p>
                 </div>
               </div>
             )}
@@ -273,10 +286,8 @@ export default function ScanPage() {
                     <p className="text-sm text-yellow-800 font-medium">Extension de garantie détectée</p>
                     <p className="text-sm text-yellow-700 mt-0.5">Extension de {extracted.extended_warranty_months} mois. Confirmez-vous ?</p>
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }}
-                        className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">Confirmer</button>
-                      <button onClick={() => { set('extended_warranty_months', '0'); setExtWarningDismissed(true) }}
-                        className="text-xs bg-white text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full">Ignorer</button>
+                      <button onClick={() => { set('extended_warranty_months', extracted.extended_warranty_months.toString()); setExtWarningDismissed(true) }} className="text-xs bg-yellow-200 text-yellow-800 px-3 py-1 rounded-full font-medium">Confirmer</button>
+                      <button onClick={() => { set('extended_warranty_months', '0'); setExtWarningDismissed(true) }} className="text-xs bg-white text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full">Ignorer</button>
                     </div>
                   </div>
                 </div>
@@ -297,8 +308,7 @@ export default function ScanPage() {
                     {label}
                     {needsConfirm(key) && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">À vérifier</span>}
                   </label>
-                  <input className={`input ${needsConfirm(key) ? 'border-yellow-300' : ''}`}
-                    value={form[key] || ''} onChange={e => set(key, e.target.value)} />
+                  <input className={`input ${needsConfirm(key) ? 'border-yellow-300' : ''}`} value={form[key] || ''} onChange={e => set(key, e.target.value)} />
                 </div>
               ))}
 
@@ -343,33 +353,23 @@ export default function ScanPage() {
                 </select>
               </div>
 
-              {/* Toggle Neuf / Occasion */}
+              {/* Toggle 3 options */}
               <div>
                 <label className="label">Type d'achat</label>
                 <div className="flex gap-2 mt-1">
-                  <button
-                    onClick={() => set('is_second_hand', false)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                      !form.is_second_hand
-                        ? 'bg-teal-400 border-teal-400 text-white'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}>
-                    ✨ Neuf
-                  </button>
-                  <button
-                    onClick={() => set('is_second_hand', true)}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                      form.is_second_hand
-                        ? 'bg-orange-400 border-orange-400 text-white'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}>
-                    🔄 Occasion
-                  </button>
+                  {PURCHASE_TYPES.map(t => (
+                    <button key={t.value} onClick={() => set('purchase_type', t.value)}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
+                        form.purchase_type === t.value
+                          ? t.activeColor
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}>
+                      {t.emoji} {t.label}
+                    </button>
+                  ))}
                 </div>
-                {form.is_second_hand && (
-                  <p className="text-xs text-orange-600 mt-1.5">
-                    L'estimation de revente tiendra compte du fait que l'objet était déjà d'occasion à l'achat.
-                  </p>
+                {currentType.desc && (
+                  <p className="text-xs text-gray-500 mt-1.5">{currentType.desc}</p>
                 )}
               </div>
             </div>
@@ -380,15 +380,9 @@ export default function ScanPage() {
 
         {(step === 'saving' || step === 'estimating') && (
           <div className="card text-center py-12">
-            <div className="text-4xl mb-4 animate-pulse">
-              {step === 'saving' ? '💾' : '💶'}
-            </div>
-            <p className="font-semibold text-gray-900">
-              {step === 'saving' ? 'Sauvegarde en cours...' : 'Estimation de la valeur de revente...'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {step === 'saving' ? 'Enregistrement de votre objet' : "L'IA analyse le marché français, patientez..."}
-            </p>
+            <div className="text-4xl mb-4 animate-pulse">{step === 'saving' ? '💾' : '💶'}</div>
+            <p className="font-semibold text-gray-900">{step === 'saving' ? 'Sauvegarde en cours...' : 'Estimation de la valeur de revente...'}</p>
+            <p className="text-sm text-gray-500 mt-2">{step === 'saving' ? 'Enregistrement de votre objet' : "L'IA analyse le marché français, patientez..."}</p>
           </div>
         )}
       </div>
