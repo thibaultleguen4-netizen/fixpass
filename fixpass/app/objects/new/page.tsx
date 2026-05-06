@@ -11,6 +11,14 @@ import { ArrowLeft } from 'lucide-react'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+type PurchaseType = 'new' | 'refurbished' | 'second_hand'
+
+const PURCHASE_TYPES: { value: PurchaseType; label: string; emoji: string; activeColor: string; desc: string }[] = [
+  { value: 'new', label: 'Neuf', emoji: '✨', activeColor: 'bg-teal-400 border-teal-400 text-white', desc: '' },
+  { value: 'refurbished', label: 'Reconditionné', emoji: '♻️', activeColor: 'bg-blue-500 border-blue-500 text-white', desc: 'Remis à neuf par un professionnel, testé et garanti.' },
+  { value: 'second_hand', label: 'Occasion', emoji: '🔄', activeColor: 'bg-orange-400 border-orange-400 text-white', desc: 'Acheté à un particulier ou sur une plateforme d\'occasion.' },
+]
+
 export default function NewObjectPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -21,10 +29,11 @@ export default function NewObjectPage() {
     purchase_date: '', purchase_price: '', currency: 'EUR',
     seller: '', order_number: '', warranty_months: '24',
     extended_warranty_months: '0', condition: 'good', notes: '',
-    is_second_hand: false,
+    purchase_type: 'new' as PurchaseType,
   })
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const currentType = PURCHASE_TYPES.find(t => t.value === form.purchase_type) || PURCHASE_TYPES[0]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,7 +65,8 @@ export default function NewObjectPage() {
       warranty_end_date: warrantyEnd,
       warranty_status: warrantyEnd ? computeWarrantyStatus(warrantyEnd) : 'unknown',
       condition: form.condition,
-      is_second_hand: form.is_second_hand,
+      purchase_type: form.purchase_type,
+      is_second_hand: form.purchase_type === 'second_hand',
       resale_min: null,
       resale_max: null,
       resale_recommended: null,
@@ -75,7 +85,7 @@ export default function NewObjectPage() {
           name: data.name, brand: data.brand, model: data.model,
           category: data.category, purchase_date: data.purchase_date,
           condition: data.condition, repairs: [],
-          is_second_hand: form.is_second_hand,
+          purchase_type: form.purchase_type,
           purchase_price: price,
         }),
       })
@@ -114,7 +124,7 @@ export default function NewObjectPage() {
             <h2 className="font-semibold text-gray-900">Informations générales</h2>
             <div>
               <label className="label">Nom de l'objet *</label>
-              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="ex: iPhone 14" required />
+              <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="ex: iPhone 14 128Go" required />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -142,33 +152,23 @@ export default function NewObjectPage() {
           <div className="card space-y-4">
             <h2 className="font-semibold text-gray-900">Achat</h2>
 
-            {/* Toggle Neuf / Occasion */}
+            {/* Toggle 3 options */}
             <div>
               <label className="label">Type d'achat</label>
               <div className="flex gap-2 mt-1">
-                <button type="button"
-                  onClick={() => set('is_second_hand', false)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                    !form.is_second_hand
-                      ? 'bg-teal-400 border-teal-400 text-white'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}>
-                  ✨ Neuf
-                </button>
-                <button type="button"
-                  onClick={() => set('is_second_hand', true)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
-                    form.is_second_hand
-                      ? 'bg-orange-400 border-orange-400 text-white'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}>
-                  🔄 Occasion
-                </button>
+                {PURCHASE_TYPES.map(t => (
+                  <button key={t.value} type="button" onClick={() => set('purchase_type', t.value)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
+                      form.purchase_type === t.value
+                        ? t.activeColor
+                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}>
+                    {t.emoji} {t.label}
+                  </button>
+                ))}
               </div>
-              {form.is_second_hand && (
-                <p className="text-xs text-orange-600 mt-1.5">
-                  L'estimation de revente tiendra compte du fait que l'objet était déjà d'occasion à l'achat.
-                </p>
+              {currentType.desc && (
+                <p className="text-xs text-gray-500 mt-1.5">{currentType.desc}</p>
               )}
             </div>
 
@@ -184,7 +184,7 @@ export default function NewObjectPage() {
             </div>
             <div>
               <label className="label">Vendeur</label>
-              <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Amazon, Leboncoin..." />
+              <input className="input" value={form.seller} onChange={e => set('seller', e.target.value)} placeholder="Fnac, Back Market, Leboncoin..." />
             </div>
             <div>
               <label className="label">N° de commande</label>
@@ -220,7 +220,7 @@ export default function NewObjectPage() {
             </div>
             <div>
               <label className="label">Notes</label>
-              <textarea className="input h-20 resize-none" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observations, accessoires inclus..." />
+              <textarea className="input h-20 resize-none" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Observations, capacité stockage, accessoires inclus..." />
             </div>
           </div>
 
