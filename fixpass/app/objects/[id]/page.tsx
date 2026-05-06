@@ -156,6 +156,7 @@ export default function ObjectDetailPage() {
           name: obj.name, brand: obj.brand, model: obj.model, category: obj.category,
           purchase_date: obj.purchase_date, purchase_price: obj.purchase_price, condition: obj.condition,
           is_second_hand: (obj as any).is_second_hand || false,
+purchase_type: (obj as any).purchase_type || 'new',
           repairs: repairs.map(r => ({ title: r.title, date: r.repair_date, cost: r.cost, description: r.description })),
         }),
       })
