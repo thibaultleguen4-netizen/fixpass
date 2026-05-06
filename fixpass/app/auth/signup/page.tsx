@@ -1,18 +1,16 @@
 'use client'
-
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 export default function SignupPage() {
-  const router = useRouter()
   const supabase = createClient()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,8 +25,29 @@ export default function SignupPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      setSuccess(true)
+      setLoading(false)
     }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="text-5xl mb-4">📬</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Vérifiez votre email</h2>
+          <p className="text-gray-500 text-sm leading-relaxed mb-6">
+            Un email de confirmation a été envoyé à <strong>{email}</strong>. Cliquez sur le lien dans l'email pour activer votre compte.
+          </p>
+          <p className="text-xs text-gray-400">
+            Vous ne trouvez pas l'email ? Vérifiez vos spams.
+          </p>
+          <Link href="/auth/login" className="block mt-6 text-teal-600 font-medium text-sm hover:underline">
+            Retour à la connexion
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -36,14 +55,13 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="mx-auto mb-4">
-  <rect width="48" height="48" rx="14" fill="#1D9E75"/>
-  <path d="M24 8 L36 13 L36 26 C36 33 30.5 38 24 40 C17.5 38 12 33 12 26 L12 13 Z" fill="white" opacity="0.95"/>
-  <text x="24" y="25" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
-</svg>
+            <rect width="48" height="48" rx="14" fill="#1D9E75"/>
+            <path d="M24 8 L36 13 L36 26 C36 33 30.5 38 24 40 C17.5 38 12 33 12 26 L12 13 Z" fill="white" opacity="0.95"/>
+            <text x="24" y="25" textAnchor="middle" dominantBaseline="middle" fontSize="15" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
+          </svg>
           <h1 className="text-2xl font-bold text-gray-900">Créer votre coffre</h1>
           <p className="text-gray-500 mt-1">Gratuit, sans carte bancaire</p>
         </div>
-
         <form onSubmit={handleSignup} className="card space-y-4">
           {error && (
             <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>
@@ -63,8 +81,10 @@ export default function SignupPage() {
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? 'Création...' : 'Créer mon compte'}
           </button>
+          <p className="text-xs text-gray-400 text-center">
+            Un email de confirmation vous sera envoyé.
+          </p>
         </form>
-
         <p className="text-center text-sm text-gray-500 mt-4">
           Déjà un compte ?{' '}
           <Link href="/auth/login" className="text-teal-600 font-medium hover:underline">
