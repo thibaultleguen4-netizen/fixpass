@@ -150,7 +150,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Avatar + nom */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 text-center">
           <div className="w-20 h-20 bg-teal-400 rounded-full flex items-center justify-center text-white text-2xl font-semibold mx-auto mb-3">
             {initials}
@@ -161,7 +160,6 @@ export default function ProfilePage() {
           <p className="text-sm text-gray-400 mt-1">{profile.email}</p>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white border border-gray-100 rounded-2xl p-3.5 text-center">
             <p className="text-2xl font-semibold" style={{ color: '#1D9E75' }}>{objects.length}</p>
@@ -177,7 +175,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Informations personnelles */}
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
             Informations personnelles
@@ -228,75 +225,46 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Paramètres */}
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Paramètres</p>
           <div className="space-y-0">
-            <Link href="/household"
-              className="flex items-center justify-between py-3 border-b border-gray-50">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">🏠</span>
-                <span className="text-sm text-gray-900">Mon foyer</span>
-              </div>
+            <Link href="/household" className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3"><span className="text-lg">🏠</span><span className="text-sm text-gray-900">Mon foyer</span></div>
               <span className="text-gray-300 text-lg">›</span>
             </Link>
-            <Link href="/auth/reset-password"
-              className="flex items-center justify-between py-3 border-b border-gray-50">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">🔒</span>
-                <span className="text-sm text-gray-900">Changer le mot de passe</span>
-              </div>
+            <Link href="/auth/reset-password" className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3"><span className="text-lg">🔒</span><span className="text-sm text-gray-900">Changer le mot de passe</span></div>
               <span className="text-gray-300 text-lg">›</span>
             </Link>
             <div className="flex items-center justify-between py-3 border-b border-gray-50">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">🔔</span>
-                <span className="text-sm text-gray-900">Alertes garanties</span>
-              </div>
+              <div className="flex items-center gap-3"><span className="text-lg">🔔</span><span className="text-sm text-gray-900">Alertes garanties</span></div>
               <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">Actives</span>
             </div>
             <div className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">🌍</span>
-                <span className="text-sm text-gray-900">Devise</span>
-              </div>
+              <div className="flex items-center gap-3"><span className="text-lg">🌍</span><span className="text-sm text-gray-900">Devise</span></div>
               <span className="text-sm text-gray-500 font-medium">EUR €</span>
             </div>
           </div>
         </div>
 
-        {/* À propos */}
         <div className="bg-white border border-gray-100 rounded-2xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">À propos</p>
           <div className="space-y-0">
-            <Link href="/mentions-legales"
-              className="flex items-center justify-between py-3 border-b border-gray-50">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">📄</span>
-                <span className="text-sm text-gray-900">Mentions légales</span>
-              </div>
+            <Link href="/mentions-legales" className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3"><span className="text-lg">📄</span><span className="text-sm text-gray-900">Mentions légales</span></div>
               <span className="text-gray-300 text-lg">›</span>
             </Link>
-            <Link href="/mentions-legales"
-              className="flex items-center justify-between py-3 border-b border-gray-50">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">🛡️</span>
-                <span className="text-sm text-gray-900">Politique de confidentialité</span>
-              </div>
+            <Link href="/politique-confidentialite" className="flex items-center justify-between py-3 border-b border-gray-50">
+              <div className="flex items-center gap-3"><span className="text-lg">🛡️</span><span className="text-sm text-gray-900">Politique de confidentialité</span></div>
               <span className="text-gray-300 text-lg">›</span>
             </Link>
-            <a href="mailto:thibaultleguen4@gmail.com"
-              className="flex items-center justify-between py-3">
-              <div className="flex items-center gap-3">
-                <span className="text-lg">💬</span>
-                <span className="text-sm text-gray-900">Nous contacter</span>
-              </div>
+            <a href="mailto:thibaultleguen4@gmail.com" className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3"><span className="text-lg">💬</span><span className="text-sm text-gray-900">Nous contacter</span></div>
               <span className="text-gray-300 text-lg">›</span>
             </a>
           </div>
         </div>
 
-        {/* Déconnexion */}
         <button onClick={handleLogout}
           className="w-full bg-red-50 border border-red-200 text-red-600 rounded-2xl py-4 flex items-center justify-center gap-2.5 text-sm font-medium hover:bg-red-100 transition-colors">
           <LogOut size={16} />
@@ -305,7 +273,6 @@ export default function ProfilePage() {
 
       </div>
 
-      {/* Bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around z-10">
         {[
           { icon: '🏠', label: 'Accueil', href: '/dashboard', active: false },
