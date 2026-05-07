@@ -16,13 +16,35 @@ export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      // Attendre que le cookie de session soit disponible après la redirection
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      const { data: { session } } = await supabase.auth.getSession()
       if (session) {
+        setReady(true)
+        return
+      }
+
+      // Retry après 1 seconde supplémentaire
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      const { data: { session: session2 } } = await supabase.auth.getSession()
+      if (session2) {
+        setReady(true)
+        return
+      }
+
+      // Retry final après 2 secondes supplémentaires
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      const { data: { session: session3 } } = await supabase.auth.getSession()
+      if (session3) {
         setReady(true)
       } else {
         setError('Lien invalide ou expiré. Demandez un nouveau lien.')
       }
-    })
+    }
+
+    checkSession()
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
