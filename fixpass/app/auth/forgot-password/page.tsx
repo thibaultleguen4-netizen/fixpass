@@ -106,24 +106,24 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleVerifyCode} className="card space-y-4">
             <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
               <p className="text-sm text-teal-800">
-                Un code à 6 chiffres a été envoyé à <strong>{email}</strong>. Vérifiez vos spams si vous ne le voyez pas.
+                Un code a été envoyé à <strong>{email}</strong>. Vérifiez vos spams si vous ne le voyez pas.
               </p>
             </div>
             {error && <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>}
             <div>
-              <label className="label">Code à 6 chiffres</label>
+              <label className="label">Code reçu par email</label>
               <input
                 className="input text-center text-2xl font-mono tracking-widest"
                 type="text"
                 inputMode="numeric"
-                maxLength={6}
+                maxLength={7}
                 value={code}
                 onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="000000"
+                placeholder="0000000"
                 required
               />
             </div>
-            <button type="submit" disabled={loading || code.length !== 6} className="btn-primary w-full">
+            <button type="submit" disabled={loading || code.length < 6} className="btn-primary w-full">
               {loading ? 'Vérification...' : 'Vérifier le code'}
             </button>
             <button type="button" onClick={() => { setStep('email'); setError('') }}
