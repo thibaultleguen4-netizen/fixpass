@@ -16,17 +16,13 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Étape 1 — Envoyer le code OTP
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false },
-    })
+    const { error } = await supabase.auth.resetPasswordForEmail(email)
     if (error) {
-      setError('Impossible d\'envoyer le code. Vérifiez votre email.')
+      setError('Email introuvable. Vérifiez votre adresse.')
       setLoading(false)
       return
     }
@@ -34,7 +30,6 @@ export default function ForgotPasswordPage() {
     setLoading(false)
   }
 
-  // Étape 2 — Vérifier le code OTP
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -42,7 +37,7 @@ export default function ForgotPasswordPage() {
     const { error } = await supabase.auth.verifyOtp({
       email,
       token: code,
-      type: 'email',
+      type: 'recovery',
     })
     if (error) {
       setError('Code incorrect ou expiré. Vérifiez et réessayez.')
@@ -53,7 +48,6 @@ export default function ForgotPasswordPage() {
     setLoading(false)
   }
 
-  // Étape 3 — Changer le mot de passe
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirm) { setError('Les mots de passe ne correspondent pas.'); return }
@@ -90,7 +84,6 @@ export default function ForgotPasswordPage() {
           </p>
         </div>
 
-        {/* Étape 1 — Email */}
         {step === 'email' && (
           <form onSubmit={handleSendCode} className="card space-y-4">
             {error && <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>}
@@ -109,7 +102,6 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        {/* Étape 2 — Code OTP */}
         {step === 'code' && (
           <form onSubmit={handleVerifyCode} className="card space-y-4">
             <div className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
@@ -141,7 +133,6 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        {/* Étape 3 — Nouveau mot de passe */}
         {step === 'password' && (
           <form onSubmit={handleChangePassword} className="card space-y-4">
             {error && <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-lg">{error}</div>}
@@ -163,7 +154,6 @@ export default function ForgotPasswordPage() {
           </form>
         )}
 
-        {/* Étape 4 — Succès */}
         {step === 'done' && (
           <div className="card text-center space-y-4 py-8">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
