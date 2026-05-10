@@ -9,10 +9,10 @@ export default function Home() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#1D9E75"/>
-  <path d="M16 5 L24 8.5 L24 17 C24 22 20.5 25.5 16 27 C11.5 25.5 8 22 8 17 L8 8.5 Z" fill="white" opacity="0.95"/>
-  <text x="16" y="17" textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
-</svg>
+              <rect width="32" height="32" rx="8" fill="#1D9E75"/>
+              <path d="M16 5 L24 8.5 L24 17 C24 22 20.5 25.5 16 27 C11.5 25.5 8 22 8 17 L8 8.5 Z" fill="white" opacity="0.95"/>
+              <text x="16" y="17" textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="700" fill="#1D9E75" fontFamily="Arial">F</text>
+            </svg>
             <span className="font-semibold text-gray-900 text-lg">FixPass</span>
           </div>
           <div className="flex items-center gap-3">
@@ -43,8 +43,8 @@ export default function Home() {
           <Link href="/auth/signup" className="bg-teal-400 hover:bg-teal-600 text-white text-base font-medium px-8 py-3.5 rounded-xl transition-colors">
             Créer mon coffre gratuit
           </Link>
-          <Link href="/auth/login" className="text-gray-500 hover:text-gray-900 text-base px-8 py-3.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors">
-            Se connecter
+          <Link href="/demo" className="text-teal-600 hover:text-teal-700 text-base font-medium px-8 py-3.5 rounded-xl border border-teal-200 hover:border-teal-300 bg-teal-50 transition-colors flex items-center gap-2">
+            ▶ Voir la démo
           </Link>
         </div>
         <p className="text-sm text-gray-400 mt-4">Gratuit · Sans carte bancaire · 2 minutes pour commencer</p>
@@ -59,7 +59,6 @@ export default function Home() {
             <div className="w-3 h-3 rounded-full bg-green-400"></div>
           </div>
           <div className="bg-white rounded-xl overflow-hidden border border-gray-100">
-            {/* App header */}
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 bg-teal-400 rounded-md flex items-center justify-center text-white text-xs font-bold">F</div>
@@ -67,7 +66,6 @@ export default function Home() {
               </div>
               <span className="text-xs text-gray-400">Thomas</span>
             </div>
-            {/* App body */}
             <div className="p-4">
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {[
@@ -123,7 +121,7 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
-            { num: '1', title: 'Scannez', desc: 'Photo ou PDF de votre facture. L\'IA extrait toutes les informations automatiquement.' },
+            { num: '1', title: 'Scannez', desc: "Photo ou PDF de votre facture. L'IA extrait toutes les informations automatiquement." },
             { num: '2', title: 'Confirmez', desc: 'Vérifiez les données extraites et validez en un clic. Corrigez si besoin.' },
             { num: '3', title: 'Suivez', desc: 'Garanties, valeur de revente, réparabilité — tout est centralisé dans votre coffre.' },
           ].map(s => (
@@ -149,12 +147,12 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
-            { emoji: '📄', bg: 'bg-teal-50', title: 'Scan IA', desc: 'Extraction automatique depuis vos factures photo ou PDF.' },
+            { emoji: '📄', bg: 'bg-teal-50', title: 'Scan IA', desc: "Extraction automatique depuis vos factures photo ou PDF." },
             { emoji: '🛡️', bg: 'bg-green-50', title: 'Garanties', desc: 'Alertes avant expiration, extensions de garantie détectées.' },
             { emoji: '💶', bg: 'bg-yellow-50', title: 'Revente', desc: 'Estimation IA basée sur les prix du marché français.' },
-            { emoji: '🔧', bg: 'bg-blue-50', title: 'Réparabilité', desc: 'Score officiel adapté à chaque type d\'objet.' },
+            { emoji: '🔧', bg: 'bg-blue-50', title: 'Réparabilité', desc: "Score officiel adapté à chaque type d'objet." },
             { emoji: '📎', bg: 'bg-purple-50', title: 'Documents', desc: 'Toutes vos factures stockées et téléchargeables.' },
-            { emoji: '✍️', bg: 'bg-pink-50', title: 'Annonces', desc: 'Annonce de revente générée automatiquement.' },
+            { emoji: '🚨', bg: 'bg-red-50', title: 'Mode sinistre', desc: 'Dossier assurance complet généré en 30 secondes.' },
           ].map(f => (
             <div key={f.title} className="bg-white border border-gray-100 rounded-2xl p-5 hover:border-gray-200 transition-colors">
               <div className={`w-10 h-10 ${f.bg} rounded-xl flex items-center justify-center text-xl mb-4`}>{f.emoji}</div>
@@ -162,6 +160,21 @@ export default function Home() {
               <p className="text-xs text-gray-400 leading-relaxed">{f.desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Demo CTA */}
+      <section className="px-6 pb-20 max-w-4xl mx-auto">
+        <div className="bg-gray-50 border border-gray-100 rounded-3xl px-8 py-12 text-center">
+          <div className="text-4xl mb-4">▶</div>
+          <h2 className="text-2xl font-medium text-gray-900 mb-3">Essayez sans créer de compte</h2>
+          <p className="text-gray-500 text-base mb-8 max-w-md mx-auto">
+            Découvrez en 2 minutes comment FixPass peut vous aider à gérer vos objets, suivre vos garanties et préparer vos reventes.
+          </p>
+          <Link href="/demo" className="bg-teal-400 hover:bg-teal-600 text-white text-base font-medium px-10 py-3.5 rounded-xl transition-colors inline-block">
+            Voir la démo interactive →
+          </Link>
+          <p className="text-xs text-gray-400 mt-3">Aucune inscription requise</p>
         </div>
       </section>
 
